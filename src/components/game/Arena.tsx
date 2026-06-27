@@ -115,13 +115,9 @@ function Game({
   onStateChange: (s: GameState) => void;
   onKillFeed: (msg: string) => void;
 }) {
-  const { camera, scene } = useThree();
+  const { camera } = useThree();
   const player = useRef({ pos: new THREE.Vector3(0, 1.6, 8), hp: 100, kills: 0, deaths: 0, ammo: 30 });
-  const [bots, setBots] = useState<Bot[]>(() => createBots(5));
-  const botsRef = useRef(bots);
-  botsRef.current = bots;
   const lastFire = useRef(0);
-  const lastBotShot = useRef<Record<number, number>>({});
   const muzzleFlash = useRef<{ t: number }>({ t: 0 });
 
   useEffect(() => {
@@ -152,76 +148,7 @@ function Game({
       lastFire.current = now;
       player.current.ammo -= 1;
       muzzleFlash.current.t = now;
-      // hitscan
-      const origin = camera.position.clone();
-      const dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-      const ray = new THREE.Raycaster(origin, dir, 0.1, 80);
-      let best: { bot: Bot; dist: number } | null = null;
-      for (const b of botsRef.current) {
-        if (!b.alive) continue;
-        const sphere = new THREE.Sphere(b.pos.clone().setY(1.1), 0.7);
-        const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
-        if (hit) {
-          const dist = hit.distanceTo(origin);
-          if (!best || dist < best.dist) best = { bot: b, dist };
-        }
-      }
-      if (best) {
-        best.bot.hp -= 34;
-        if (best.bot.hp <= 0) {
-          best.bot.alive = false;
-          best.bot.respawnAt = now + 3000;
-          player.current.kills += 1;
-          onKillFeed(`You eliminated ${best.bot.name}`);
-        }
-        setBots([...botsRef.current]);
-      }
     }
-
-    // Bot AI
-    let updated = false;
-    for (const b of botsRef.current) {
-      if (!b.alive) {
-        if (now >= b.respawnAt) {
-          b.alive = true;
-          b.hp = 100;
-          b.pos.set((Math.random() - 0.5) * ARENA, 0.9, (Math.random() - 0.5) * ARENA);
-          updated = true;
-        }
-        continue;
-      }
-      // wander + chase player
-      const toPlayer = player.current.pos.clone().setY(0.9).sub(b.pos);
-      const distP = toPlayer.length();
-      if (distP < 18) b.dir.copy(toPlayer.normalize());
-      else if (Math.random() < 0.01)
-        b.dir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-      b.pos.addScaledVector(b.dir, 2.5 * dt);
-      b.pos.x = THREE.MathUtils.clamp(b.pos.x, -ARENA + 1, ARENA - 1);
-      b.pos.z = THREE.MathUtils.clamp(b.pos.z, -ARENA + 1, ARENA - 1);
-
-      // shoot
-      const last = lastBotShot.current[b.id] ?? 0;
-      if (distP < 14 && now - last > 1200 && player.current.hp > 0) {
-        lastBotShot.current[b.id] = now;
-        // hit chance falls with distance
-        if (Math.random() < Math.max(0.15, 0.7 - distP / 25)) {
-          player.current.hp -= 12;
-          if (player.current.hp <= 0) {
-            player.current.hp = 100;
-            player.current.deaths += 1;
-            player.current.pos.set(
-              (Math.random() - 0.5) * ARENA,
-              1.6,
-              (Math.random() - 0.5) * ARENA,
-            );
-            onKillFeed(`${b.name} eliminated you`);
-          }
-        }
-      }
-    }
-    if (updated) setBots([...botsRef.current]);
 
     // ammo regen
     if (player.current.ammo < 30 && Math.floor(now / 600) % 2 === 0) {
@@ -236,22 +163,5 @@ function Game({
     });
   });
 
-  return (
-    <group>
-      {bots.map((b) =>
-        b.alive ? (
-          <group key={b.id} position={[b.pos.x, b.pos.y, b.pos.z]}>
-            <mesh castShadow position={[0, 0.2, 0]}>
-              <capsuleGeometry args={[0.4, 0.9, 4, 8]} />
-              <meshStandardMaterial color="#ec4899" emissive="#ec4899" emissiveIntensity={0.6} />
-            </mesh>
-            <mesh position={[0, 1.1, 0]}>
-              <sphereGeometry args={[0.3, 12, 12]} />
-              <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.8} />
-            </mesh>
-          </group>
-        ) : null,
-      )}
-    </group>
-  );
+  return null;
 }
