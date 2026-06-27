@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Sky, Html } from "@react-three/drei";
+import { Sky, Text, Billboard } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
@@ -136,14 +136,21 @@ function RemotePlayerView({
         <boxGeometry args={[0.12, 0.12, 0.6]} />
         <meshStandardMaterial color="#0f172a" emissive="#22d3ee" emissiveIntensity={0.5} />
       </mesh>
-      <Html position={[0, 1.9, 0]} center distanceFactor={8} zIndexRange={[10, 0]}>
-        <div
-          className="pointer-events-none whitespace-nowrap rounded border border-primary/50 bg-black/70 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-primary"
-          style={{ textShadow: "0 0 6px var(--primary)" }}
+      <Billboard position={[0, 2, 0]}>
+        <Text
+          fontSize={0.35}
+          color="#22d3ee"
+          outlineWidth={0.04}
+          outlineColor="#000000"
+          anchorX="center"
+          anchorY="middle"
+          renderOrder={999}
+          material-depthTest={false}
+          material-toneMapped={false}
         >
-          {name}
-        </div>
-      </Html>
+          {name.toUpperCase()}
+        </Text>
+      </Billboard>
     </group>
   );
 }
