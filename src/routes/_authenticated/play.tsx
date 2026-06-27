@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/play")({
@@ -59,6 +59,10 @@ function PlayLobby() {
     navigate({ to: "/game/$roomId", params: { roomId: code } });
   }
 
+  function quickFFA() {
+    navigate({ to: "/game/$roomId", params: { roomId: "FFA" } });
+  }
+
   function joinRoom() {
     const code = roomCode.trim().toUpperCase();
     if (code.length < 4) return toast.error("Enter a valid room code");
@@ -97,6 +101,22 @@ function PlayLobby() {
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <div className="rounded-xl border-2 border-accent/60 bg-gradient-to-br from-accent/15 to-primary/10 p-6 backdrop-blur md:col-span-2">
+            <div className="flex items-center gap-2">
+              <Zap className="size-5 text-accent" />
+              <h2 className="font-display text-lg font-bold uppercase tracking-wider">Free-for-All</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Jump straight in. Every player for themselves vs live bots — first to 10 kills wins.
+            </p>
+            <Button
+              onClick={quickFFA}
+              className="mt-5 h-12 w-full bg-accent font-bold uppercase tracking-widest text-accent-foreground hover:bg-accent/90"
+            >
+              Drop into FFA
+            </Button>
+          </div>
+
           <div className="rounded-xl border border-border bg-card/70 p-6 backdrop-blur">
             <h2 className="font-display text-lg font-bold uppercase tracking-wider">Create a room</h2>
             <p className="mt-1 text-sm text-muted-foreground">Spin up a private arena and share the code with friends.</p>

@@ -1,26 +1,184 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { ArenaScene, type GameState } from "@/components/game/Arena";
+import { Crosshair, Heart, X, Zap } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
+  ssr: false,
   component: Game,
 });
 
 function Game() {
   const { roomId } = Route.useParams();
+  const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false });
+  const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30 });
+  const [feed, setFeed] = useState<{ id: number; msg: string }[]>([]);
+  const feedId = useRef(0);
+
+  // Joystick state
+  const stick = useRef<{ touchId: number | null; cx: number; cy: number }>({ touchId: null, cx: 0, cy: 0 });
+  const look = useRef<{ touchId: number | null; lx: number; ly: number }>({ touchId: null, lx: 0, ly: 0 });
+  const [stickKnob, setStickKnob] = useState({ x: 0, y: 0, active: false });
+
+  function onKillFeed(msg: string) {
+    const id = ++feedId.current;
+    setFeed((f) => [...f, { id, msg }].slice(-4));
+    setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 2500);
+  }
+
+  // Touch handlers on root
+  useEffect(() => {
+    function onStart(e: TouchEvent) {
+      for (const t of Array.from(e.changedTouches)) {
+        const isLeft = t.clientX < window.innerWidth / 2;
+        if (isLeft && stick.current.touchId === null) {
+          stick.current.touchId = t.identifier;
+          stick.current.cx = t.clientX;
+          stick.current.cy = t.clientY;
+          setStickKnob({ x: 0, y: 0, active: true });
+        } else if (!isLeft && look.current.touchId === null) {
+          look.current.touchId = t.identifier;
+          look.current.lx = t.clientX;
+          look.current.ly = t.clientY;
+        }
+      }
+    }
+    function onMove(e: TouchEvent) {
+      e.preventDefault();
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier === stick.current.touchId) {
+          const dx = t.clientX - stick.current.cx;
+          const dy = t.clientY - stick.current.cy;
+          const max = 50;
+          const len = Math.min(Math.hypot(dx, dy), max);
+          const ang = Math.atan2(dy, dx);
+          const kx = Math.cos(ang) * len;
+          const ky = Math.sin(ang) * len;
+          setStickKnob({ x: kx, y: ky, active: true });
+          controls.current.moveX = kx / max;
+          controls.current.moveY = -ky / max;
+        } else if (t.identifier === look.current.touchId) {
+          const dx = t.clientX - look.current.lx;
+          const dy = t.clientY - look.current.ly;
+          look.current.lx = t.clientX;
+          look.current.ly = t.clientY;
+          const sens = 0.005;
+          controls.current.yaw -= dx * sens;
+          controls.current.pitch -= dy * sens;
+          controls.current.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, controls.current.pitch));
+        }
+      }
+    }
+    function onEnd(e: TouchEvent) {
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier === stick.current.touchId) {
+          stick.current.touchId = null;
+          controls.current.moveX = 0;
+          controls.current.moveY = 0;
+          setStickKnob({ x: 0, y: 0, active: false });
+        } else if (t.identifier === look.current.touchId) {
+          look.current.touchId = null;
+        }
+      }
+    }
+    const opts = { passive: false } as AddEventListenerOptions;
+    window.addEventListener("touchstart", onStart, opts);
+    window.addEventListener("touchmove", onMove, opts);
+    window.addEventListener("touchend", onEnd);
+    window.addEventListener("touchcancel", onEnd);
+    return () => {
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+      window.removeEventListener("touchcancel", onEnd);
+    };
+  }, []);
+
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-      <div className="absolute inset-0 scanlines pointer-events-none opacity-40" />
-      <div className="relative z-10 max-w-lg">
-        <p className="text-xs uppercase tracking-[0.4em] text-muted-foreground">Room</p>
-        <h1 className="mt-2 font-display text-5xl font-black tracking-widest text-primary neon-text">{roomId}</h1>
-        <p className="mt-6 text-muted-foreground">
-          The 3D arena, multiplayer sync, text and voice chat ship in the next builds.
-          Share this code so friends can join.
-        </p>
-        <Link to="/play" className="mt-8 inline-block text-sm uppercase tracking-widest text-primary hover:underline">
-          ← Back to lobby
-        </Link>
+    <div className="fixed inset-0 bg-black touch-none select-none overscroll-none">
+      <ArenaScene controls={controls} onStateChange={setHud} onKillFeed={onKillFeed} />
+
+      {/* HUD */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <Crosshair className="size-6 text-primary opacity-70" strokeWidth={1.5} />
+        </div>
+
+        <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-3">
+          <Link
+            to="/play"
+            className="pointer-events-auto flex items-center gap-1 rounded-md bg-black/60 px-3 py-2 text-xs font-display uppercase tracking-widest text-primary backdrop-blur"
+          >
+            <X className="size-4" /> Leave
+          </Link>
+          <div className="rounded-md bg-black/60 px-3 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
+            {mode}
+          </div>
+          <div className="rounded-md bg-black/60 px-3 py-2 text-right font-display text-xs uppercase tracking-widest backdrop-blur">
+            <div className="text-primary">K {hud.kills}</div>
+            <div className="text-accent">D {hud.deaths}</div>
+          </div>
+        </div>
+
+        <div className="absolute top-16 right-3 space-y-1">
+          {feed.map((f) => (
+            <div key={f.id} className="rounded bg-black/60 px-2 py-1 text-xs text-foreground backdrop-blur">
+              {f.msg}
+            </div>
+          ))}
+        </div>
+
+        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
+          <div className="rounded-md bg-black/60 px-3 py-2 backdrop-blur">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <Heart className="size-4 text-destructive" />
+              <span style={{ color: hud.hp > 40 ? "var(--primary)" : "oklch(0.7 0.25 25)" }}>
+                {hud.hp}
+              </span>
+            </div>
+            <div className="mt-1 h-1 w-24 rounded bg-white/10">
+              <div
+                className="h-full rounded bg-primary transition-all"
+                style={{ width: `${hud.hp}%` }}
+              />
+            </div>
+          </div>
+          <div className="rounded-md bg-black/60 px-3 py-2 text-right backdrop-blur">
+            <div className="flex items-center gap-2 text-sm font-bold text-accent">
+              <Zap className="size-4" /> {hud.ammo}/30
+            </div>
+          </div>
+        </div>
       </div>
-    </main>
+
+      {/* Joystick */}
+      <div
+        className={`pointer-events-none absolute left-6 bottom-24 size-32 rounded-full border-2 border-primary/40 bg-black/30 backdrop-blur transition-opacity ${
+          stickKnob.active ? "opacity-100" : "opacity-40"
+        }`}
+      >
+        <div
+          className="absolute left-1/2 top-1/2 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/80 shadow-[0_0_20px_var(--primary)]"
+          style={{ transform: `translate(calc(-50% + ${stickKnob.x}px), calc(-50% + ${stickKnob.y}px))` }}
+        />
+      </div>
+
+      {/* Fire button */}
+      <button
+        onTouchStart={(e) => {
+          e.preventDefault();
+          controls.current.fire = true;
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          controls.current.fire = false;
+        }}
+        className="absolute right-6 bottom-28 grid size-24 place-items-center rounded-full border-2 border-accent bg-accent/30 text-accent backdrop-blur active:bg-accent/60"
+      >
+        <Crosshair className="size-10" />
+      </button>
+    </div>
   );
 }
