@@ -82,10 +82,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "NEONFRAG — 3D Multiplayer Arena Shooter" },
       { name: "description", content: "Browser FPS arena. Sign in, jump into a room, chat with voice, and frag your friends in real-time 3D." },
       { name: "author", content: "Neonfrag" },
-      { property: "og:title", content: "NEONFRAG — 3D Multiplayer Arena" },
-      { property: "og:description", content: "Browser FPS with voice chat and saved progress." },
+      { property: "og:title", content: "NEONFRAG — 3D Multiplayer Arena Shooter" },
+      { property: "og:description", content: "Browser FPS arena. Sign in, jump into a room, chat with voice, and frag your friends in real-time 3D." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "NEONFRAG — 3D Multiplayer Arena Shooter" },
+      { name: "twitter:description", content: "Browser FPS arena. Sign in, jump into a room, chat with voice, and frag your friends in real-time 3D." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/61dd9371-fedd-4cee-af0a-51cd264e551b" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/61dd9371-fedd-4cee-af0a-51cd264e551b" },
     ],
     links: [
       {
