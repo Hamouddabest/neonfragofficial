@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent } from "@/components/game/Arena";
-import { Crosshair, Heart, MessageSquare, Send, Users, X, Zap } from "lucide-react";
+import { Crosshair, Heart, Mic, MicOff, MessageSquare, Send, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { Room, RoomEvent, Track, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
+import { getLiveKitToken } from "@/lib/livekit.functions";
 
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
@@ -25,6 +27,12 @@ function Game() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const chatId = useRef(0);
+
+  // Voice chat
+  const roomRef = useRef<Room | null>(null);
+  const [voiceState, setVoiceState] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const [muted, setMuted] = useState(true);
+  const [voiceCount, setVoiceCount] = useState(0);
 
   // Multiplayer refs
   const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map());
@@ -132,6 +140,84 @@ function Game() {
       }
     };
   }, [user, roomId]);
+
+  // Connect LiveKit voice room
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const room = new Room({ adaptiveStream: true, dynacast: true });
+    roomRef.current = room;
+    setVoiceState("connecting");
+
+    const audioEls = new Map<string, HTMLAudioElement>();
+    function attachTrack(track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) {
+      if (track.kind !== Track.Kind.Audio) return;
+      const el = track.attach() as HTMLAudioElement;
+      el.autoplay = true;
+      el.style.display = "none";
+      document.body.appendChild(el);
+      audioEls.set(participant.identity + track.sid, el);
+    }
+    function detachTrack(track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) {
+      if (track.kind !== Track.Kind.Audio) return;
+      const key = participant.identity + track.sid;
+      const el = audioEls.get(key);
+      if (el) {
+        track.detach(el);
+        el.remove();
+        audioEls.delete(key);
+      }
+    }
+    room.on(RoomEvent.TrackSubscribed, attachTrack);
+    room.on(RoomEvent.TrackUnsubscribed, detachTrack);
+    room.on(RoomEvent.ParticipantConnected, () => setVoiceCount(room.numParticipants));
+    room.on(RoomEvent.ParticipantDisconnected, () => setVoiceCount(room.numParticipants));
+
+    (async () => {
+      try {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", user.id)
+          .maybeSingle();
+        const name = prof?.username ?? `P${user.id.slice(0, 4)}`;
+        const { token, url } = await getLiveKitToken({ data: { roomId, name } });
+        if (cancelled) return;
+        await room.connect(url, token);
+        if (cancelled) {
+          await room.disconnect();
+          return;
+        }
+        await room.localParticipant.setMicrophoneEnabled(false);
+        setMuted(true);
+        setVoiceState("connected");
+        setVoiceCount(room.numParticipants);
+      } catch (e) {
+        console.error("LiveKit connect failed", e);
+        if (!cancelled) setVoiceState("error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      for (const el of audioEls.values()) el.remove();
+      audioEls.clear();
+      room.disconnect().catch(() => {});
+      roomRef.current = null;
+    };
+  }, [user, roomId]);
+
+  async function toggleMute() {
+    const room = roomRef.current;
+    if (!room || voiceState !== "connected") return;
+    const next = !muted;
+    try {
+      await room.localParticipant.setMicrophoneEnabled(!next);
+      setMuted(next);
+    } catch (e) {
+      console.error("mic toggle failed", e);
+    }
+  }
 
   function handlePose(p: PlayerPose) {
     const ch = channelRef.current;
@@ -328,6 +414,31 @@ function Game() {
         aria-label="Toggle chat"
       >
         <MessageSquare className="size-5" />
+      </button>
+
+      {/* Voice mute toggle */}
+      <button
+        onClick={toggleMute}
+        disabled={voiceState !== "connected"}
+        className={`absolute right-3 top-32 z-20 grid size-10 place-items-center rounded-full border backdrop-blur ${
+          voiceState === "connected"
+            ? muted
+              ? "border-destructive/60 bg-black/60 text-destructive"
+              : "border-accent/60 bg-accent/30 text-accent"
+            : "border-muted-foreground/40 bg-black/60 text-muted-foreground opacity-60"
+        }`}
+        aria-label={muted ? "Unmute" : "Mute"}
+        title={
+          voiceState === "connected"
+            ? `${muted ? "Unmute" : "Mute"} (${voiceCount + 1} in voice)`
+            : voiceState === "connecting"
+              ? "Connecting voice…"
+              : voiceState === "error"
+                ? "Voice unavailable"
+                : "Voice"
+        }
+      >
+        {muted ? <MicOff className="size-5" /> : <Mic className="size-5" />}
       </button>
       {chatOpen && (
         <div className="absolute inset-x-3 bottom-56 z-20 rounded-md border border-primary/40 bg-black/80 p-2 backdrop-blur">
