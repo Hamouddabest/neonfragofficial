@@ -5,6 +5,8 @@
     "": {
       "name": "tanstack_start_ts",
       "dependencies": {
+        "@fontsource/orbitron": "^5.2.8",
+        "@fontsource/rajdhani": "^5.2.7",
         "@hookform/resolvers": "^5.2.2",
         "@lovable.dev/cloud-auth-js": "^1.1.2",
         "@radix-ui/react-accordion": "^1.2.12",
@@ -209,6 +211,10 @@
     "@floating-ui/react-dom": ["@floating-ui/react-dom@2.1.8", "", { "dependencies": { "@floating-ui/dom": "^1.7.6" }, "peerDependencies": { "react": ">=16.8.0", "react-dom": ">=16.8.0" } }, "sha512-cC52bHwM/n/CxS87FH0yWdngEZrjdtLW/qVruo68qg+prK7ZQ4YGdut2GyDVpoGeAYe/h899rVeOVm6Oi40k2A=="],
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.11", "", {}, "sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg=="],
+
+    "@fontsource/orbitron": ["@fontsource/orbitron@5.2.8", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@fontsource/orbitron/-/orbitron-5.2.8.tgz", {}, "sha512-ruzrDl5vnqNykk5DZWY0Ezj4aeFZSbCnwJTc/98ojNJHSsHhlhT2r7rwQrA5sptmF8JtB8TQTAvlfRvcV28RPw=="],
+
+    "@fontsource/rajdhani": ["@fontsource/rajdhani@5.2.7", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@fontsource/rajdhani/-/rajdhani-5.2.7.tgz", {}, "sha512-7Gy10U688fCdeFfYKebUF2TZotdgH/ghKyMsseXPmB60lpaUHC8aoCSJl5/OpZ+KHKSU2TqBfKfteVkcIXxTAQ=="],
 
     "@hookform/resolvers": ["@hookform/resolvers@5.2.2", "", { "dependencies": { "@standard-schema/utils": "^0.3.0" }, "peerDependencies": { "react-hook-form": "^7.55.0" } }, "sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA=="],
 
