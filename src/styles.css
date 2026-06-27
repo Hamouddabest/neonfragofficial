@@ -1,6 +1,12 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "@fontsource/orbitron/400.css";
+@import "@fontsource/orbitron/700.css";
+@import "@fontsource/orbitron/900.css";
+@import "@fontsource/rajdhani/400.css";
+@import "@fontsource/rajdhani/500.css";
+@import "@fontsource/rajdhani/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -59,42 +65,45 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --font-display: "Orbitron", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --radius: 0.375rem;
+  /* Dark arena theme by default */
+  --background: oklch(0.14 0.02 260);
+  --foreground: oklch(0.96 0.01 220);
+  --card: oklch(0.18 0.025 260);
+  --card-foreground: oklch(0.96 0.01 220);
+  --popover: oklch(0.18 0.025 260);
+  --popover-foreground: oklch(0.96 0.01 220);
+  --primary: oklch(0.82 0.18 195); /* cyan neon */
+  --primary-foreground: oklch(0.12 0.02 260);
+  --secondary: oklch(0.24 0.04 270);
+  --secondary-foreground: oklch(0.96 0.01 220);
+  --muted: oklch(0.22 0.03 265);
+  --muted-foreground: oklch(0.7 0.03 240);
+  --accent: oklch(0.72 0.24 340); /* magenta neon */
+  --accent-foreground: oklch(0.12 0.02 260);
+  --destructive: oklch(0.65 0.25 25);
+  --destructive-foreground: oklch(0.98 0.01 220);
+  --border: oklch(0.28 0.04 265);
+  --input: oklch(0.24 0.04 265);
+  --ring: oklch(0.82 0.18 195);
+  --chart-1: oklch(0.82 0.18 195);
+  --chart-2: oklch(0.72 0.24 340);
+  --chart-3: oklch(0.85 0.2 90);
+  --chart-4: oklch(0.7 0.22 145);
+  --chart-5: oklch(0.7 0.22 30);
+  --sidebar: oklch(0.16 0.025 260);
+  --sidebar-foreground: oklch(0.96 0.01 220);
+  --sidebar-primary: oklch(0.82 0.18 195);
+  --sidebar-primary-foreground: oklch(0.12 0.02 260);
+  --sidebar-accent: oklch(0.24 0.04 270);
+  --sidebar-accent-foreground: oklch(0.96 0.01 220);
+  --sidebar-border: oklch(0.28 0.04 265);
+  --sidebar-ring: oklch(0.82 0.18 195);
 }
 
 .dark {
@@ -140,5 +149,37 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    background-image:
+      radial-gradient(at 20% 0%, oklch(0.22 0.06 200 / 0.5) 0px, transparent 50%),
+      radial-gradient(at 80% 100%, oklch(0.22 0.08 330 / 0.4) 0px, transparent 50%);
+    background-attachment: fixed;
+    min-height: 100dvh;
   }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+  }
+}
+
+@utility neon-border {
+  box-shadow:
+    0 0 0 1px var(--color-primary),
+    0 0 24px -4px oklch(0.82 0.18 195 / 0.6),
+    inset 0 0 24px -8px oklch(0.82 0.18 195 / 0.25);
+}
+
+@utility neon-text {
+  text-shadow: 0 0 18px oklch(0.82 0.18 195 / 0.65);
+}
+
+@utility scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    oklch(1 0 0 / 0.025) 2px,
+    oklch(1 0 0 / 0.025) 3px
+  );
 }
