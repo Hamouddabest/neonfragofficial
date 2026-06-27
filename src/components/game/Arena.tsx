@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Sky } from "@react-three/drei";
-import { useEffect, useMemo, useRef } from "react";
+import { Sky, Html } from "@react-three/drei";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 const ARENA = 30;
@@ -51,6 +51,7 @@ export function ArenaScene({
   onStateChange,
   onKillFeed,
   remotePlayersRef,
+  remoteIds,
   onPose,
   onShoot,
   incomingHitRef,
@@ -60,6 +61,7 @@ export function ArenaScene({
   onStateChange: (s: GameState) => void;
   onKillFeed: (msg: string) => void;
   remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+  remoteIds: string[];
   onPose: (p: PlayerPose) => void;
   onShoot: (s: ShotEvent, hitId: string | null) => void;
   incomingHitRef: React.MutableRefObject<number>;
@@ -71,6 +73,9 @@ export function ArenaScene({
       <ambientLight intensity={0.45} />
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
       <ArenaWorld />
+      {remoteIds.map((id) => (
+        <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} />
+      ))}
       <Game
         controls={controls}
         onStateChange={onStateChange}
@@ -82,6 +87,64 @@ export function ArenaScene({
         onLocalDeath={onLocalDeath}
       />
     </Canvas>
+  );
+}
+
+function RemotePlayerView({
+  id,
+  remotePlayersRef,
+}: {
+  id: string;
+  remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const [name, setName] = useState<string>(() => remotePlayersRef.current.get(id)?.name ?? "Rival");
+  const color = useMemo(() => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+    return `hsl(${h}, 90%, 60%)`;
+  }, [id]);
+  useFrame(() => {
+    const r = remotePlayersRef.current.get(id);
+    if (!r || !ref.current) return;
+    ref.current.position.set(r.x, r.y - 0.9, r.z);
+    ref.current.rotation.y = r.yaw;
+    ref.current.visible = r.alive;
+    if (r.name && r.name !== name) setName(r.name);
+  });
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 0.2, 0]} castShadow>
+        <capsuleGeometry args={[0.4, 0.9, 4, 8]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
+      </mesh>
+      <mesh position={[0, 1.1, 0]} castShadow>
+        <sphereGeometry args={[0.3, 16, 16]} />
+        <meshStandardMaterial color="#fef9c3" emissive={color} emissiveIntensity={0.3} />
+      </mesh>
+      {/* arms */}
+      <mesh position={[0.5, 0.4, 0]}>
+        <boxGeometry args={[0.18, 0.7, 0.18]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+      </mesh>
+      <mesh position={[-0.5, 0.4, 0]}>
+        <boxGeometry args={[0.18, 0.7, 0.18]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+      </mesh>
+      {/* gun */}
+      <mesh position={[0.4, 0.4, -0.45]}>
+        <boxGeometry args={[0.12, 0.12, 0.6]} />
+        <meshStandardMaterial color="#0f172a" emissive="#22d3ee" emissiveIntensity={0.5} />
+      </mesh>
+      <Html position={[0, 1.9, 0]} center distanceFactor={8} zIndexRange={[10, 0]}>
+        <div
+          className="pointer-events-none whitespace-nowrap rounded border border-primary/50 bg-black/70 px-2 py-0.5 font-display text-[10px] uppercase tracking-widest text-primary"
+          style={{ textShadow: "0 0 6px var(--primary)" }}
+        >
+          {name}
+        </div>
+      </Html>
+    </group>
   );
 }
 
@@ -244,39 +307,6 @@ function Game({
         pitch: c.pitch,
         alive: player.current.hp > 0,
       });
-    }
-
-    // Update remote meshes
-    if (remoteGroup.current) {
-      const g = remoteGroup.current;
-      const seen = new Set<string>();
-      for (const r of remotePlayersRef.current.values()) {
-        seen.add(r.id);
-        let child = g.getObjectByName(r.id) as THREE.Group | undefined;
-        if (!child) {
-          child = new THREE.Group();
-          child.name = r.id;
-          const body = new THREE.Mesh(
-            new THREE.CapsuleGeometry(0.4, 0.9, 4, 8),
-            new THREE.MeshStandardMaterial({ color: "#ec4899", emissive: "#ec4899", emissiveIntensity: 0.6 }),
-          );
-          body.position.y = 0.2;
-          const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.3, 12, 12),
-            new THREE.MeshStandardMaterial({ color: "#22d3ee", emissive: "#22d3ee", emissiveIntensity: 0.8 }),
-          );
-          head.position.y = 1.1;
-          child.add(body, head);
-          g.add(child);
-        }
-        child.position.set(r.x, r.y - 0.9, r.z);
-        child.rotation.y = r.yaw;
-        child.visible = r.alive;
-      }
-      // remove stale
-      for (const obj of [...g.children]) {
-        if (!seen.has(obj.name)) g.remove(obj);
-      }
     }
 
     onStateChange({

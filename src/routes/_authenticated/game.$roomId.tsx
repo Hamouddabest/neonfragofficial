@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent } from "@/components/game/Arena";
-import { Crosshair, Heart, Users, X, Zap } from "lucide-react";
+import { Crosshair, Heart, MessageSquare, Send, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -20,6 +20,11 @@ function Game() {
   const [feed, setFeed] = useState<{ id: number; msg: string }[]>([]);
   const feedId = useRef(0);
   const [playerCount, setPlayerCount] = useState(1);
+  const [remoteIds, setRemoteIds] = useState<string[]>([]);
+  const [chat, setChat] = useState<{ id: number; name: string; msg: string }[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const chatId = useRef(0);
 
   // Multiplayer refs
   const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map());
@@ -76,7 +81,12 @@ function Game() {
               id, name, x: 0, y: 0.9, z: 0, yaw: 0, alive: true,
             });
           }
+          // refresh names from presence
+          const r = remotePlayersRef.current.get(id);
+          const nm = state[id]?.[0]?.name;
+          if (r && nm) r.name = nm;
         }
+        setRemoteIds(ids.filter((i) => i !== user.id));
       });
 
       channel.on("broadcast", { event: "pose" }, ({ payload }) => {
@@ -99,6 +109,12 @@ function Game() {
         const id = ++feedId.current;
         setFeed((f) => [...f, { id, msg: `${p.shooterName} hit you` }].slice(-4));
         setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 2500);
+      });
+
+      channel.on("broadcast", { event: "chat" }, ({ payload }) => {
+        const p = payload as { name: string; msg: string };
+        const id = ++chatId.current;
+        setChat((c) => [...c, { id, name: p.name, msg: p.msg }].slice(-30));
       });
 
       channel.subscribe(async (status) => {
@@ -139,6 +155,19 @@ function Game() {
 
   function handleLocalDeath() {
     // already added to feed via hit event
+  }
+
+  function sendChat() {
+    const text = chatInput.trim().slice(0, 140);
+    if (!text || !channelRef.current) return;
+    channelRef.current.send({
+      type: "broadcast",
+      event: "chat",
+      payload: { name: myNameRef.current, msg: text },
+    });
+    const id = ++chatId.current;
+    setChat((c) => [...c, { id, name: myNameRef.current, msg: text }].slice(-30));
+    setChatInput("");
   }
 
   // Touch handlers on root
@@ -216,6 +245,7 @@ function Game() {
         onStateChange={setHud}
         onKillFeed={onKillFeed}
         remotePlayersRef={remotePlayersRef}
+        remoteIds={remoteIds}
         onPose={handlePose}
         onShoot={handleShoot}
         incomingHitRef={incomingHitRef}
@@ -255,6 +285,19 @@ function Game() {
           ))}
         </div>
 
+        {/* Chat overlay */}
+        <div className="pointer-events-none absolute left-3 top-20 max-w-[55%] space-y-1">
+          {chat.slice(-5).map((c) => (
+            <div
+              key={c.id}
+              className="rounded bg-black/60 px-2 py-1 text-xs backdrop-blur"
+            >
+              <span className="font-display uppercase tracking-widest text-primary">{c.name}:</span>{" "}
+              <span className="text-foreground">{c.msg}</span>
+            </div>
+          ))}
+        </div>
+
         <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
           <div className="rounded-md bg-black/60 px-3 py-2 backdrop-blur">
             <div className="flex items-center gap-2 text-sm font-bold">
@@ -277,6 +320,53 @@ function Game() {
           </div>
         </div>
       </div>
+
+      {/* Chat toggle + panel */}
+      <button
+        onClick={() => setChatOpen((v) => !v)}
+        className="absolute right-3 top-20 z-20 grid size-10 place-items-center rounded-full border border-primary/50 bg-black/60 text-primary backdrop-blur"
+        aria-label="Toggle chat"
+      >
+        <MessageSquare className="size-5" />
+      </button>
+      {chatOpen && (
+        <div className="absolute inset-x-3 bottom-56 z-20 rounded-md border border-primary/40 bg-black/80 p-2 backdrop-blur">
+          <div className="mb-2 max-h-40 space-y-1 overflow-y-auto text-xs">
+            {chat.length === 0 ? (
+              <div className="text-muted-foreground">No messages yet. Say hi!</div>
+            ) : (
+              chat.map((c) => (
+                <div key={c.id}>
+                  <span className="font-display uppercase tracking-widest text-primary">{c.name}:</span>{" "}
+                  <span className="text-foreground">{c.msg}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendChat();
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Message…"
+              maxLength={140}
+              className="flex-1 rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="submit"
+              className="grid size-9 place-items-center rounded border border-accent bg-accent/30 text-accent active:bg-accent/60"
+              aria-label="Send"
+            >
+              <Send className="size-4" />
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Joystick */}
       <div
