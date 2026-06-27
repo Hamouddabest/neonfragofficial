@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState } from "@/components/game/Arena";
-import { Crosshair, Heart, X, Zap } from "lucide-react";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent } from "@/components/game/Arena";
+import { Crosshair, Heart, Users, X, Zap } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
@@ -11,11 +13,20 @@ export const Route = createFileRoute("/_authenticated/game/$roomId")({
 
 function Game() {
   const { roomId } = Route.useParams();
+  const { user } = useAuth();
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30 });
   const [feed, setFeed] = useState<{ id: number; msg: string }[]>([]);
   const feedId = useRef(0);
+  const [playerCount, setPlayerCount] = useState(1);
+
+  // Multiplayer refs
+  const remotePlayersRef = useRef<Map<string, RemotePlayer>>(new Map());
+  const incomingHitRef = useRef(0);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const myIdRef = useRef<string>("");
+  const myNameRef = useRef<string>("Player");
 
   // Joystick state
   const stick = useRef<{ touchId: number | null; cx: number; cy: number }>({ touchId: null, cx: 0, cy: 0 });
@@ -26,6 +37,108 @@ function Game() {
     const id = ++feedId.current;
     setFeed((f) => [...f, { id, msg }].slice(-4));
     setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 2500);
+  }
+
+  // Supabase Realtime: presence + pose broadcast + shots
+  useEffect(() => {
+    if (!user) return;
+    myIdRef.current = user.id;
+    let cancelled = false;
+
+    (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      myNameRef.current = prof?.username ?? `P${user.id.slice(0, 4)}`;
+
+      const channel = supabase.channel(`room:${roomId}`, {
+        config: { presence: { key: user.id } },
+      });
+      channelRef.current = channel;
+
+      channel.on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState() as Record<string, { name?: string }[]>;
+        const ids = Object.keys(state);
+        setPlayerCount(ids.length);
+        // drop disconnected
+        for (const id of [...remotePlayersRef.current.keys()]) {
+          if (!ids.includes(id)) remotePlayersRef.current.delete(id);
+        }
+        // ensure entries (positions will arrive via pose events)
+        for (const id of ids) {
+          if (id === user.id) continue;
+          if (!remotePlayersRef.current.has(id)) {
+            const name = state[id]?.[0]?.name ?? "Rival";
+            remotePlayersRef.current.set(id, {
+              id, name, x: 0, y: 0.9, z: 0, yaw: 0, alive: true,
+            });
+          }
+        }
+      });
+
+      channel.on("broadcast", { event: "pose" }, ({ payload }) => {
+        const p = payload as PlayerPose & { id: string; name: string };
+        if (p.id === user.id) return;
+        const existing = remotePlayersRef.current.get(p.id);
+        remotePlayersRef.current.set(p.id, {
+          id: p.id,
+          name: p.name ?? existing?.name ?? "Rival",
+          x: p.x, y: p.y, z: p.z,
+          yaw: p.yaw,
+          alive: p.alive,
+        });
+      });
+
+      channel.on("broadcast", { event: "hit" }, ({ payload }) => {
+        const p = payload as { targetId: string; damage: number; shooterName: string };
+        if (p.targetId !== user.id) return;
+        incomingHitRef.current += p.damage;
+        const id = ++feedId.current;
+        setFeed((f) => [...f, { id, msg: `${p.shooterName} hit you` }].slice(-4));
+        setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 2500);
+      });
+
+      channel.subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track({ name: myNameRef.current });
+        }
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [user, roomId]);
+
+  function handlePose(p: PlayerPose) {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({
+      type: "broadcast",
+      event: "pose",
+      payload: { ...p, id: myIdRef.current, name: myNameRef.current },
+    });
+  }
+
+  function handleShoot(_s: ShotEvent, hitId: string | null) {
+    const ch = channelRef.current;
+    if (!ch || !hitId) return;
+    ch.send({
+      type: "broadcast",
+      event: "hit",
+      payload: { targetId: hitId, damage: 34, shooterName: myNameRef.current },
+    });
+  }
+
+  function handleLocalDeath() {
+    // already added to feed via hit event
   }
 
   // Touch handlers on root
@@ -98,7 +211,16 @@ function Game() {
 
   return (
     <div className="fixed inset-0 bg-black touch-none select-none overscroll-none">
-      <ArenaScene controls={controls} onStateChange={setHud} onKillFeed={onKillFeed} />
+      <ArenaScene
+        controls={controls}
+        onStateChange={setHud}
+        onKillFeed={onKillFeed}
+        remotePlayersRef={remotePlayersRef}
+        onPose={handlePose}
+        onShoot={handleShoot}
+        incomingHitRef={incomingHitRef}
+        onLocalDeath={handleLocalDeath}
+      />
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-0">
@@ -114,7 +236,10 @@ function Game() {
             <X className="size-4" /> Leave
           </Link>
           <div className="rounded-md bg-black/60 px-3 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
-            {mode}
+            <div>{mode}</div>
+            <div className="mt-0.5 flex items-center justify-center gap-1 text-accent">
+              <Users className="size-3" /> {playerCount}
+            </div>
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-right font-display text-xs uppercase tracking-widest backdrop-blur">
             <div className="text-primary">K {hud.kills}</div>
