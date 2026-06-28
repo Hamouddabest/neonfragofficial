@@ -18,6 +18,7 @@ export type Controls = {
   yaw: number;
   pitch: number;
   fire: boolean;
+  reload: boolean;
 };
 
 export type RemotePlayer = {
@@ -56,6 +57,8 @@ export function ArenaScene({
   onShoot,
   incomingHitRef,
   onLocalDeath,
+  onFireSound,
+  onReloadSound,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -66,6 +69,8 @@ export function ArenaScene({
   onShoot: (s: ShotEvent, hitId: string | null) => void;
   incomingHitRef: React.MutableRefObject<number>;
   onLocalDeath: (killerName: string) => void;
+  onFireSound?: () => void;
+  onReloadSound?: () => void;
 }) {
   const fireRef = useRef(0);
   return (
@@ -87,6 +92,8 @@ export function ArenaScene({
         incomingHitRef={incomingHitRef}
         onLocalDeath={onLocalDeath}
         fireRef={fireRef}
+        onFireSound={onFireSound}
+        onReloadSound={onReloadSound}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} />
     </Canvas>
@@ -260,6 +267,8 @@ function Game({
   incomingHitRef,
   onLocalDeath,
   fireRef,
+  onFireSound,
+  onReloadSound,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -270,6 +279,8 @@ function Game({
   incomingHitRef: React.MutableRefObject<number>;
   onLocalDeath: (killerName: string) => void;
   fireRef: React.MutableRefObject<number>;
+  onFireSound?: () => void;
+  onReloadSound?: () => void;
 }) {
   const { camera } = useThree();
   const player = useRef({ pos: new THREE.Vector3(0, 1.6, 8), hp: 100, kills: 0, deaths: 0, ammo: 30 });
@@ -277,6 +288,7 @@ function Game({
   const muzzleFlash = useRef<{ t: number }>({ t: 0 });
   const lastPose = useRef(0);
   const remoteGroup = useRef<THREE.Group>(null);
+  const reloadEnd = useRef(0);
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
@@ -317,12 +329,29 @@ function Game({
       }
     }
 
+    // Reload trigger
+    if (c.reload && reloadEnd.current === 0 && player.current.ammo < 30 && player.current.hp > 0) {
+      reloadEnd.current = now + 1500;
+      onReloadSound?.();
+    }
+    if (reloadEnd.current > 0 && now >= reloadEnd.current) {
+      player.current.ammo = 30;
+      reloadEnd.current = 0;
+    }
+    // Auto-reload when empty
+    if (player.current.ammo <= 0 && reloadEnd.current === 0 && player.current.hp > 0) {
+      reloadEnd.current = now + 1500;
+      onReloadSound?.();
+    }
+
+    const reloading = reloadEnd.current > 0;
     // Fire
-    if (c.fire && now - lastFire.current > 180 && player.current.ammo > 0 && player.current.hp > 0) {
+    if (c.fire && !reloading && now - lastFire.current > 180 && player.current.ammo > 0 && player.current.hp > 0) {
       lastFire.current = now;
       player.current.ammo -= 1;
       muzzleFlash.current.t = now;
       fireRef.current = now;
+      onFireSound?.();
       // hitscan vs remote players
       const origin = camera.position.clone();
       const dir = new THREE.Vector3();
@@ -351,11 +380,6 @@ function Game({
         const r = remotePlayersRef.current.get(best.id);
         if (r) onKillFeed(`You eliminated ${r.name}`);
       }
-    }
-
-    // ammo regen
-    if (player.current.ammo < 30 && Math.floor(now / 600) % 2 === 0) {
-      player.current.ammo = Math.min(30, player.current.ammo + (dt * 4));
     }
 
     // Broadcast pose ~15Hz
