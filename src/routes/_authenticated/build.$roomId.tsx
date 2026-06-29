@@ -59,8 +59,8 @@ function Builder() {
       .upsert({
         room_id: roomId,
         owner_id: user.id,
-        blocks: blocks as unknown as object[],
-        spawn_points: spawns as unknown as object[],
+        blocks: JSON.parse(JSON.stringify(blocks)),
+        spawn_points: JSON.parse(JSON.stringify(spawns)),
         confirmed: true,
       });
     setSaving(false);
