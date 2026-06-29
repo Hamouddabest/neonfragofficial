@@ -61,11 +61,12 @@ function Index() {
           </Button>
         </div>
 
-        <div className="mt-20 grid w-full grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mt-20 grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: Gamepad2, title: "True 3D", body: "Real-time arena rendered in your browser with WebGL." },
             { icon: Users, title: "Multiplayer", body: "Create or join a room code and squad up with friends." },
             { icon: Mic, title: "Voice + Chat", body: "Talk over voice, type quick callouts. Built-in." },
+            { icon: Hammer, title: "Creative Builder", body: "Build your own 3D arena with blocks, stairs, and spawn points." },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="rounded-lg border border-border/60 bg-card/60 p-6 text-left backdrop-blur">
               <Icon className="mb-3 text-primary" />
