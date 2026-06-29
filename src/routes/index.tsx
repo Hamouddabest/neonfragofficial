@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Gamepad2, Mic, Users } from "lucide-react";
+import { Crosshair, Gamepad2, Hammer, Mic, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
@@ -54,16 +54,19 @@ function Index() {
               <Crosshair className="mr-2" /> {user ? "Enter arena" : "Sign up & play"}
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className="h-14 px-10 text-base uppercase tracking-widest">
-            <Link to="/auth">How it works</Link>
+          <Button asChild size="lg" className="h-14 px-10 text-base font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_var(--primary)]">
+            <Link to={user ? "/play" : "/auth"} search={user ? undefined : { mode: "signup" }}>
+              <Hammer className="mr-2" /> Build arena
+            </Link>
           </Button>
         </div>
 
-        <div className="mt-20 grid w-full grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mt-20 grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: Gamepad2, title: "True 3D", body: "Real-time arena rendered in your browser with WebGL." },
             { icon: Users, title: "Multiplayer", body: "Create or join a room code and squad up with friends." },
             { icon: Mic, title: "Voice + Chat", body: "Talk over voice, type quick callouts. Built-in." },
+            { icon: Hammer, title: "Creative Builder", body: "Build your own 3D arena with blocks, stairs, and spawn points." },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="rounded-lg border border-border/60 bg-card/60 p-6 text-left backdrop-blur">
               <Icon className="mb-3 text-primary" />
