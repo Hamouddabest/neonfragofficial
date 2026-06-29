@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/play")({
@@ -21,6 +21,7 @@ function PlayLobby() {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState("");
   const [callsign, setCallsign] = useState("");
+  const [customCode, setCustomCode] = useState("");
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -56,6 +57,17 @@ function PlayLobby() {
 
   function createRoom() {
     const code = generateRoomCode();
+    navigate({ to: "/game/$roomId", params: { roomId: code } });
+  }
+
+  function createCustomArena() {
+    const code = generateRoomCode();
+    navigate({ to: "/build/$roomId", params: { roomId: code } });
+  }
+
+  function joinCustomArena() {
+    const code = customCode.trim().toUpperCase();
+    if (code.length < 4) return toast.error("Enter a valid arena ID");
     navigate({ to: "/game/$roomId", params: { roomId: code } });
   }
 
@@ -137,6 +149,34 @@ function PlayLobby() {
                 className="font-display tracking-[0.3em] uppercase"
               />
               <Button onClick={joinRoom} className="h-11">Join</Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-primary/60 bg-gradient-to-br from-primary/15 to-accent/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Hammer className="size-5 text-primary" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Creative — build your arena</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Place cubes, plates, pillars, stairs, and spawn points. Hit the ✅ to lock it in, then share the ID so friends can drop in.
+          </p>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <Button
+              onClick={createCustomArena}
+              className="h-12 w-full bg-primary font-bold uppercase tracking-widest text-primary-foreground hover:bg-primary/90"
+            >
+              Build new arena
+            </Button>
+            <div className="flex gap-2">
+              <Input
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                placeholder="ARENA ID"
+                maxLength={8}
+                className="font-display tracking-[0.3em] uppercase"
+              />
+              <Button onClick={joinCustomArena} variant="outline" className="h-11">Join</Button>
             </div>
           </div>
         </div>

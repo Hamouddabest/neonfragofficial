@@ -47,6 +47,19 @@ export type ShotEvent = {
   shooterName: string;
 };
 
+export type ArenaBlock =
+  | { id: string; kind: "cube"; x: number; z: number; rot: number }
+  | { id: string; kind: "plate"; x: number; z: number; rot: number }
+  | { id: string; kind: "cylinder"; x: number; z: number; rot: number }
+  | { id: string; kind: "stairs"; x: number; z: number; rot: number };
+
+export type SpawnPoint = { id: string; x: number; z: number };
+
+export type CustomArena = {
+  blocks: ArenaBlock[];
+  spawnPoints: SpawnPoint[];
+};
+
 export function ArenaScene({
   controls,
   onStateChange,
@@ -59,6 +72,7 @@ export function ArenaScene({
   onLocalDeath,
   onFireSound,
   onReloadSound,
+  customArena,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -71,6 +85,7 @@ export function ArenaScene({
   onLocalDeath: (killerName: string) => void;
   onFireSound?: () => void;
   onReloadSound?: () => void;
+  customArena?: CustomArena | null;
 }) {
   const fireRef = useRef(0);
   return (
@@ -78,7 +93,7 @@ export function ArenaScene({
       <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
       <ambientLight intensity={0.45} />
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
-      <ArenaWorld />
+      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} />
       ))}
@@ -94,6 +109,7 @@ export function ArenaScene({
         fireRef={fireRef}
         onFireSound={onFireSound}
         onReloadSound={onReloadSound}
+        spawnPoints={customArena?.spawnPoints}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} />
     </Canvas>
@@ -269,6 +285,7 @@ function Game({
   fireRef,
   onFireSound,
   onReloadSound,
+  spawnPoints,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -281,9 +298,17 @@ function Game({
   fireRef: React.MutableRefObject<number>;
   onFireSound?: () => void;
   onReloadSound?: () => void;
+  spawnPoints?: SpawnPoint[];
 }) {
   const { camera } = useThree();
-  const player = useRef({ pos: new THREE.Vector3(0, 1.6, 8), hp: 100, kills: 0, deaths: 0, ammo: 30 });
+  const pickSpawn = () => {
+    if (spawnPoints && spawnPoints.length > 0) {
+      const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+      return new THREE.Vector3(sp.x, 1.6, sp.z);
+    }
+    return new THREE.Vector3(0, 1.6, 8);
+  };
+  const player = useRef({ pos: pickSpawn(), hp: 100, kills: 0, deaths: 0, ammo: 30 });
   const lastFire = useRef(0);
   const muzzleFlash = useRef<{ t: number }>({ t: 0 });
   const lastPose = useRef(0);
@@ -320,11 +345,8 @@ function Game({
       if (player.current.hp <= 0) {
         player.current.hp = 100;
         player.current.deaths += 1;
-        player.current.pos.set(
-          (Math.random() - 0.5) * ARENA,
-          1.6,
-          (Math.random() - 0.5) * ARENA,
-        );
+        const sp = pickSpawn();
+        player.current.pos.set(sp.x, sp.y, sp.z);
         onLocalDeath("");
       }
     }
@@ -404,6 +426,76 @@ function Game({
   });
 
   return <group ref={remoteGroup} />;
+}
+
+function CustomArenaWorld({ blocks, spawnPoints }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[] }) {
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[ARENA * 2, ARENA * 2]} />
+        <meshStandardMaterial color="#1a1530" />
+      </mesh>
+      <gridHelper args={[ARENA * 2, 40, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />
+      {[
+        [0, ARENA, ARENA * 2, 1],
+        [0, -ARENA, ARENA * 2, 1],
+        [ARENA, 0, 1, ARENA * 2],
+        [-ARENA, 0, 1, ARENA * 2],
+      ].map(([x, z, w, d], i) => (
+        <mesh key={i} position={[x, 1.5, z]} castShadow>
+          <boxGeometry args={[w as number, 3, d as number]} />
+          <meshStandardMaterial color="#221b3d" emissive="#06b6d4" emissiveIntensity={0.15} />
+        </mesh>
+      ))}
+      {blocks.map((b) => <ArenaBlockMesh key={b.id} block={b} />)}
+      {spawnPoints.map((s) => (
+        <group key={s.id} position={[s.x, 0.05, s.z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.8, 1, 32]} />
+            <meshBasicMaterial color="#22d3ee" toneMapped={false} transparent opacity={0.6} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+export function ArenaBlockMesh({ block }: { block: ArenaBlock }) {
+  if (block.kind === "cube") {
+    return (
+      <mesh position={[block.x, 1, block.z]} castShadow receiveShadow>
+        <boxGeometry args={[2, 2, 2]} />
+        <meshStandardMaterial color="#2a1f4a" emissive="#ec4899" emissiveIntensity={0.3} />
+      </mesh>
+    );
+  }
+  if (block.kind === "plate") {
+    return (
+      <mesh position={[block.x, 0.2, block.z]} castShadow receiveShadow>
+        <boxGeometry args={[2, 0.4, 2]} />
+        <meshStandardMaterial color="#221b3d" emissive="#22d3ee" emissiveIntensity={0.3} />
+      </mesh>
+    );
+  }
+  if (block.kind === "cylinder") {
+    return (
+      <mesh position={[block.x, 1, block.z]} castShadow receiveShadow>
+        <cylinderGeometry args={[1, 1, 2, 24]} />
+        <meshStandardMaterial color="#2a1f4a" emissive="#a78bfa" emissiveIntensity={0.4} />
+      </mesh>
+    );
+  }
+  // stairs — 3 steps
+  return (
+    <group position={[block.x, 0, block.z]} rotation={[0, block.rot ?? 0, 0]}>
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} position={[0, 0.25 + i * 0.5, -0.66 + i * 0.66]} castShadow receiveShadow>
+          <boxGeometry args={[2, 0.5, 0.66]} />
+          <meshStandardMaterial color="#2a1f4a" emissive="#22d3ee" emissiveIntensity={0.25} />
+        </mesh>
+      ))}
+    </group>
+  );
 }
 
 function ViewmodelGun({

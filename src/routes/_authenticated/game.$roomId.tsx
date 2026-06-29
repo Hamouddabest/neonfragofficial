@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent } from "@/components/game/Arena";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena } from "@/components/game/Arena";
 import { Crosshair, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -31,6 +31,26 @@ function Game() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [customArena, setCustomArena] = useState<CustomArena | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("custom_arenas")
+        .select("blocks, spawn_points, confirmed")
+        .eq("room_id", roomId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data && data.confirmed) {
+        setCustomArena({
+          blocks: (data.blocks as unknown as CustomArena["blocks"]) ?? [],
+          spawnPoints: (data.spawn_points as unknown as CustomArena["spawnPoints"]) ?? [],
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [roomId]);
 
   // Web Audio: synthesized weapon sounds
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -500,6 +520,7 @@ function Game() {
         onLocalDeath={handleLocalDeath}
         onFireSound={playShoot}
         onReloadSound={playReload}
+        customArena={customArena}
       />
 
       {/* HUD */}

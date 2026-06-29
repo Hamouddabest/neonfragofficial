@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_arenas: {
+        Row: {
+          blocks: Json
+          confirmed: boolean
+          created_at: string
+          owner_id: string
+          room_id: string
+          spawn_points: Json
+          updated_at: string
+        }
+        Insert: {
+          blocks?: Json
+          confirmed?: boolean
+          created_at?: string
+          owner_id: string
+          room_id: string
+          spawn_points?: Json
+          updated_at?: string
+        }
+        Update: {
+          blocks?: Json
+          confirmed?: boolean
+          created_at?: string
+          owner_id?: string
+          room_id?: string
+          spawn_points?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       match_history: {
         Row: {
           deaths: number
