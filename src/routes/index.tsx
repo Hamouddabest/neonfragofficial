@@ -54,8 +54,10 @@ function Index() {
               <Crosshair className="mr-2" /> {user ? "Enter arena" : "Sign up & play"}
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className="h-14 px-10 text-base uppercase tracking-widest">
-            <Link to="/auth">How it works</Link>
+          <Button asChild size="lg" className="h-14 px-10 text-base font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_var(--primary)]">
+            <Link to={user ? "/play" : "/auth"} search={user ? undefined : { mode: "signup" }}>
+              <Hammer className="mr-2" /> Build arena
+            </Link>
           </Button>
         </div>
 
