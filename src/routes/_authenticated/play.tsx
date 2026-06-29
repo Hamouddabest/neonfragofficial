@@ -112,14 +112,43 @@ function PlayLobby() {
           <StatCard icon={Trophy} label="Matches" value={stats?.matches_played ?? 0} />
         </div>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
+        <div className="mt-10 rounded-xl border-2 border-primary/60 bg-gradient-to-br from-primary/15 to-accent/10 p-6 backdrop-blur ring-2 ring-primary/20 ring-offset-2 ring-offset-background md:col-span-2">
+          <div className="flex items-center gap-2">
+            <Hammer className="size-5 text-primary" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Creative — build your arena</h2>
+            <span className="ml-auto rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent-foreground">NEW</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Place cubes, plates, pillars, stairs, and spawn points. Hit the ✅ to lock it in, then share the ID so friends can drop in.
+          </p>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <Button
+              onClick={createCustomArena}
+              className="h-12 w-full bg-primary font-bold uppercase tracking-widest text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_var(--primary)]"
+            >
+              Build new arena
+            </Button>
+            <div className="flex gap-2">
+              <Input
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                placeholder="ARENA ID"
+                maxLength={8}
+                className="font-display tracking-[0.3em] uppercase"
+              />
+              <Button onClick={joinCustomArena} variant="outline" className="h-11">Join</Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
           <div className="rounded-xl border-2 border-accent/60 bg-gradient-to-br from-accent/15 to-primary/10 p-6 backdrop-blur md:col-span-2">
             <div className="flex items-center gap-2">
               <Zap className="size-5 text-accent" />
               <h2 className="font-display text-lg font-bold uppercase tracking-wider">Free-for-All</h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Jump straight in. Every player for themselves vs live bots — first to 10 kills wins.
+              Jump straight into a live arena. Every player for themselves — fight for the most frags.
             </p>
             <Button
               onClick={quickFFA}
@@ -149,34 +178,6 @@ function PlayLobby() {
                 className="font-display tracking-[0.3em] uppercase"
               />
               <Button onClick={joinRoom} className="h-11">Join</Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 rounded-xl border-2 border-primary/60 bg-gradient-to-br from-primary/15 to-accent/10 p-6 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <Hammer className="size-5 text-primary" />
-            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Creative — build your arena</h2>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Place cubes, plates, pillars, stairs, and spawn points. Hit the ✅ to lock it in, then share the ID so friends can drop in.
-          </p>
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <Button
-              onClick={createCustomArena}
-              className="h-12 w-full bg-primary font-bold uppercase tracking-widest text-primary-foreground hover:bg-primary/90"
-            >
-              Build new arena
-            </Button>
-            <div className="flex gap-2">
-              <Input
-                value={customCode}
-                onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
-                placeholder="ARENA ID"
-                maxLength={8}
-                className="font-display tracking-[0.3em] uppercase"
-              />
-              <Button onClick={joinCustomArena} variant="outline" className="h-11">Join</Button>
             </div>
           </div>
         </div>
