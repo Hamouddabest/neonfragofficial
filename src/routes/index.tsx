@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Gamepad2, Hammer, Mic, Users } from "lucide-react";
+import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { ensureGuest } from "@/hooks/use-identity";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -18,6 +19,11 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  function playAsGuest() {
+    ensureGuest();
+    navigate({ to: "/play" });
+  }
   return (
     <main className="relative min-h-dvh overflow-hidden">
       <div className="absolute inset-0 scanlines pointer-events-none opacity-60" />
@@ -59,6 +65,11 @@ function Index() {
               <Hammer className="mr-2" /> Build arena
             </Link>
           </Button>
+          {!user && !loading && (
+            <Button onClick={playAsGuest} size="lg" variant="outline" className="h-14 px-10 text-base font-bold uppercase tracking-widest border-accent text-accent hover:bg-accent/10">
+              <UserCircle2 className="mr-2" /> Play as guest
+            </Button>
+          )}
         </div>
 
         <div className="mt-20 grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
