@@ -51,7 +51,10 @@ function Builder() {
   }
 
   async function confirm() {
-    if (!user) return;
+    if (!user) {
+      toast.error("Sign up to save custom arenas");
+      return;
+    }
     if (spawns.length === 0) { toast.error("Place at least one spawn point"); return; }
     setSaving(true);
     const { error } = await supabase
