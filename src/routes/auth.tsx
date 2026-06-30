@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { ensureGuest } from "@/hooks/use-identity";
+import { UserCircle2 } from "lucide-react";
 
 const searchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional(),
@@ -79,6 +81,11 @@ function AuthPage() {
     }
   }
 
+  function playAsGuest() {
+    ensureGuest();
+    navigate({ to: "/play" });
+  }
+
   return (
     <main className="relative flex min-h-dvh items-center justify-center px-6 py-12">
       <div className="absolute inset-0 scanlines pointer-events-none opacity-50" />
@@ -98,6 +105,11 @@ function AuthPage() {
             <svg className="mr-2 size-4" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1H12v3.2h5.35c-.25 1.55-1.85 4.55-5.35 4.55-3.2 0-5.85-2.65-5.85-5.85S8.8 7.15 12 7.15c1.85 0 3.05.8 3.75 1.45l2.55-2.45C16.7 4.6 14.55 3.65 12 3.65 6.95 3.65 2.85 7.75 2.85 12.8S6.95 21.95 12 21.95c6.95 0 9.45-4.85 9.45-7.4 0-.5-.05-.95-.1-1.45z"/></svg>
             Continue with Google
           </Button>
+
+          <Button onClick={playAsGuest} variant="ghost" className="mt-2 w-full h-11 border border-accent/40 text-accent hover:bg-accent/10">
+            <UserCircle2 className="mr-2 size-4" /> Play as guest
+          </Button>
+          <p className="mt-1 text-center text-[11px] text-muted-foreground">Guests get a random callsign like Guest#1679. Stats won't save.</p>
 
           <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-widest text-muted-foreground">
             <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
