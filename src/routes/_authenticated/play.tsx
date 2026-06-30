@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { useIdentity, clearGuest } from "@/hooks/use-identity";
 
 export const Route = createFileRoute("/_authenticated/play")({
   head: () => ({ meta: [{ title: "Lobby — NEONFRAG" }] }),
@@ -19,12 +20,15 @@ function generateRoomCode() {
 
 function PlayLobby() {
   const navigate = useNavigate();
+  const { identity } = useIdentity();
+  const isGuest = identity?.isGuest ?? false;
   const [roomCode, setRoomCode] = useState("");
   const [callsign, setCallsign] = useState("");
   const [customCode, setCustomCode] = useState("");
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
+    enabled: !isGuest,
     queryFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return null;
@@ -35,6 +39,7 @@ function PlayLobby() {
 
   const { data: stats } = useQuery({
     queryKey: ["stats"],
+    enabled: !isGuest,
     queryFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return null;
@@ -44,10 +49,15 @@ function PlayLobby() {
   });
 
   useEffect(() => {
-    if (profile?.username) setCallsign(profile.username);
-  }, [profile]);
+    if (isGuest && identity) setCallsign(identity.name);
+    else if (profile?.username) setCallsign(profile.username);
+  }, [profile, identity, isGuest]);
 
   async function saveCallsign() {
+    if (isGuest) {
+      toast.error("Sign up to save your callsign");
+      return;
+    }
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const { error } = await supabase.from("profiles").update({ username: callsign }).eq("id", u.user.id);
@@ -61,6 +71,10 @@ function PlayLobby() {
   }
 
   function createCustomArena() {
+    if (isGuest) {
+      toast.error("Sign up to build custom arenas");
+      return;
+    }
     const code = generateRoomCode();
     navigate({ to: "/build/$roomId", params: { roomId: code } });
   }
@@ -82,11 +96,13 @@ function PlayLobby() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    if (isGuest) clearGuest();
+    else await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   }
 
   const kd = stats && stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : (stats?.kills ?? 0).toFixed(2);
+  const displayName = isGuest ? identity?.name ?? "guest" : profile?.username ?? "soldier";
 
   return (
     <main className="relative min-h-dvh px-6 py-10">
@@ -96,14 +112,28 @@ function PlayLobby() {
           <Link to="/" className="font-display text-xl font-black tracking-widest text-primary neon-text">
             NEON<span className="text-accent">FRAG</span>
           </Link>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            <LogOut className="mr-2 size-4" /> Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            {isGuest && (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/auth" search={{ mode: "signup" }}>
+                  <UserCircle2 className="mr-2 size-4" /> Sign up to save stats
+                </Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              <LogOut className="mr-2 size-4" /> {isGuest ? "Exit guest" : "Sign out"}
+            </Button>
+          </div>
         </header>
 
         <h1 className="font-display text-4xl font-black uppercase tracking-tight md:text-5xl">
-          Ready up, <span className="text-primary neon-text">{profile?.username ?? "soldier"}</span>
+          Ready up, <span className="text-primary neon-text">{displayName}</span>
         </h1>
+        {isGuest && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Playing as guest — stats won't save. <Link to="/auth" search={{ mode: "signup" }} className="text-primary hover:underline">Create an account</Link> to keep your progress.
+          </p>
+        )}
 
         <div className="mt-8 grid gap-4 md:grid-cols-4">
           <StatCard icon={Target} label="Kills" value={stats?.kills ?? 0} />

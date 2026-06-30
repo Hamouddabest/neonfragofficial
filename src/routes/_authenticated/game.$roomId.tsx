@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena } from "@/components/game/Arena";
 import { Crosshair, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useIdentity } from "@/hooks/use-identity";
 import { Room, RoomEvent, Track, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
-import { getLiveKitToken } from "@/lib/livekit.functions";
+import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authenticated/game/$roomId")({
 
 function Game() {
   const { roomId } = Route.useParams();
-  const { user } = useAuth();
+  const { identity } = useIdentity();
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30 });
@@ -182,21 +182,25 @@ function Game() {
 
   // Supabase Realtime: presence + pose broadcast + shots
   useEffect(() => {
-    if (!user) return;
-    myIdRef.current = user.id;
+    if (!identity) return;
+    myIdRef.current = identity.id;
     let cancelled = false;
 
     (async () => {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (cancelled) return;
-      myNameRef.current = prof?.username ?? `P${user.id.slice(0, 4)}`;
+      if (identity.isGuest) {
+        myNameRef.current = identity.name;
+      } else {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", identity.id)
+          .maybeSingle();
+        if (cancelled) return;
+        myNameRef.current = prof?.username ?? `P${identity.id.slice(0, 4)}`;
+      }
 
       const channel = supabase.channel(`room:${roomId}`, {
-        config: { presence: { key: user.id } },
+        config: { presence: { key: identity.id } },
       });
       channelRef.current = channel;
 
@@ -210,7 +214,7 @@ function Game() {
         }
         // ensure entries (positions will arrive via pose events)
         for (const id of ids) {
-          if (id === user.id) continue;
+          if (id === identity.id) continue;
           if (!remotePlayersRef.current.has(id)) {
             const name = state[id]?.[0]?.name ?? "Rival";
             remotePlayersRef.current.set(id, {
@@ -222,12 +226,12 @@ function Game() {
           const nm = state[id]?.[0]?.name;
           if (r && nm) r.name = nm;
         }
-        setRemoteIds(ids.filter((i) => i !== user.id));
+        setRemoteIds(ids.filter((i) => i !== identity.id));
       });
 
       channel.on("broadcast", { event: "pose" }, ({ payload }) => {
         const p = payload as PlayerPose & { id: string; name: string };
-        if (p.id === user.id) return;
+        if (p.id === identity.id) return;
         const existing = remotePlayersRef.current.get(p.id);
         remotePlayersRef.current.set(p.id, {
           id: p.id,
@@ -240,7 +244,7 @@ function Game() {
 
       channel.on("broadcast", { event: "hit" }, ({ payload }) => {
         const p = payload as { targetId: string; damage: number; shooterName: string };
-        if (p.targetId !== user.id) return;
+        if (p.targetId !== identity.id) return;
         incomingHitRef.current += p.damage;
         const id = ++feedId.current;
         setFeed((f) => [...f, { id, msg: `${p.shooterName} hit you` }].slice(-4));
@@ -267,11 +271,11 @@ function Game() {
         channelRef.current = null;
       }
     };
-  }, [user, roomId]);
+  }, [identity, roomId]);
 
   // Connect LiveKit voice room
   useEffect(() => {
-    if (!user) return;
+    if (!identity) return;
     let cancelled = false;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
@@ -303,13 +307,18 @@ function Game() {
 
     (async () => {
       try {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", user.id)
-          .maybeSingle();
-        const name = prof?.username ?? `P${user.id.slice(0, 4)}`;
-        const { token, url } = await getLiveKitToken({ data: { roomId, name } });
+        let name = identity.name;
+        if (!identity.isGuest) {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", identity.id)
+            .maybeSingle();
+          name = prof?.username ?? `P${identity.id.slice(0, 4)}`;
+        }
+        const { token, url } = identity.isGuest
+          ? await getLiveKitTokenPublic({ data: { roomId, name, identity: identity.id } })
+          : await getLiveKitToken({ data: { roomId, name } });
         if (cancelled) return;
         await room.connect(url, token);
         if (cancelled) {
@@ -333,7 +342,7 @@ function Game() {
       room.disconnect().catch(() => {});
       roomRef.current = null;
     };
-  }, [user, roomId]);
+  }, [identity, roomId]);
 
   async function toggleMute() {
     const room = roomRef.current;
