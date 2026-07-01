@@ -2,13 +2,13 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { useState } from "react";
-import { Box, Square, Circle, ArrowUpRight, MapPin, Trash2, Check, Copy, X, RotateCw } from "lucide-react";
+import { Box, Square, Circle, ArrowUpRight, MapPin, Trash2, Check, Copy, X, RotateCw, ArrowUp, Wind } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
-import { ArenaBlockMesh, type ArenaBlock, type SpawnPoint } from "@/components/game/Arena";
+import { ArenaBlockMesh, blockBox, type ArenaBlock, type SpawnPoint } from "@/components/game/Arena";
 
-type Tool = "cube" | "plate" | "cylinder" | "stairs" | "spawn" | "delete";
+type Tool = "cube" | "plate" | "cylinder" | "stairs" | "jumppad" | "speedpad" | "spawn" | "delete";
 type Kind = Exclude<Tool, "delete" | "spawn">;
 
 const SIZE = 30;
@@ -31,11 +31,18 @@ function Builder() {
   const [spawns, setSpawns] = useState<SpawnPoint[]>([]);
   const [saving, setSaving] = useState(false);
 
-  function place(x: number, z: number) {
+  function place(x: number, z: number, y: number) {
     const sx = snap(x), sz = snap(z);
+    const sy = Math.max(0, Math.round(y / 2) * 2);
     if (Math.abs(sx) > SIZE - 1 || Math.abs(sz) > SIZE - 1) return;
     if (tool === "delete") {
-      setBlocks((b) => b.filter((bl) => !(bl.x === sx && bl.z === sz)));
+      // remove topmost block at this XZ (or the exact Y if any)
+      setBlocks((b) => {
+        const stack = b.filter((bl) => bl.x === sx && bl.z === sz).sort((a, c) => (c.y ?? 0) - (a.y ?? 0));
+        if (stack.length === 0) return b;
+        const target = stack[0];
+        return b.filter((bl) => bl.id !== target.id);
+      });
       setSpawns((s) => s.filter((sp) => !(sp.x === sx && sp.z === sz)));
       return;
     }
@@ -44,10 +51,15 @@ function Builder() {
       return;
     }
     const kind: Kind = tool;
-    setBlocks((b) => {
-      const filtered = b.filter((bl) => !(bl.x === sx && bl.z === sz));
-      return [...filtered, { id: crypto.randomUUID(), kind, x: sx, z: sz, rot } as ArenaBlock];
-    });
+    setBlocks((b) => [...b, { id: crypto.randomUUID(), kind, x: sx, z: sz, y: sy, rot } as ArenaBlock]);
+  }
+
+  // When user clicks an existing block, place the new block on top of that block's stack.
+  function placeOnBlock(clickedId: string) {
+    const target = blocks.find((b) => b.id === clickedId);
+    if (!target) return;
+    const top = blockBox(target).max.y;
+    place(target.x, target.z, top);
   }
 
   async function confirm() {
@@ -81,6 +93,8 @@ function Builder() {
     { id: "plate", label: "Plate", Icon: Square },
     { id: "cylinder", label: "Pillar", Icon: Circle },
     { id: "stairs", label: "Stairs", Icon: ArrowUpRight },
+    { id: "jumppad", label: "Jump", Icon: ArrowUp },
+    { id: "speedpad", label: "Speed", Icon: Wind },
     { id: "spawn", label: "Spawn", Icon: MapPin },
     { id: "delete", label: "Delete", Icon: Trash2 },
   ];
@@ -91,8 +105,24 @@ function Builder() {
         <ambientLight intensity={0.55} />
         <directionalLight position={[15, 25, 10]} intensity={1.1} castShadow />
         <OrbitControls makeDefault enablePan={false} maxPolarAngle={Math.PI / 2.15} minDistance={10} maxDistance={70} />
-        <Ground onPlace={place} />
-        {blocks.map((b) => <ArenaBlockMesh key={b.id} block={b} />)}
+        <Ground onPlace={(x, z) => place(x, z, 0)} />
+        {blocks.map((b) => (
+          <group
+            key={b.id}
+            onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+              e.stopPropagation();
+              if (tool === "delete") {
+                setBlocks((bs) => bs.filter((bl) => bl.id !== b.id));
+              } else if (tool === "spawn") {
+                place(b.x, b.z, 0);
+              } else {
+                placeOnBlock(b.id);
+              }
+            }}
+          >
+            <ArenaBlockMesh block={b} />
+          </group>
+        ))}
         {spawns.map((s) => (
           <group key={s.id} position={[s.x, 0.05, s.z]}>
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
