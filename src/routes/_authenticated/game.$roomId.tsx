@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena } from "@/components/game/Arena";
-import { Crosshair, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Users, X, Zap } from "lucide-react";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, WEAPONS } from "@/components/game/Arena";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { Room, RoomEvent, Track, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
@@ -17,8 +17,17 @@ function Game() {
   const { roomId } = Route.useParams();
   const { identity } = useIdentity();
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false });
-  const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30 });
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId });
+  const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30, maxAmmo: 30, weapon: "rifle", reloading: false });
+  const [weapon, setWeaponState] = useState<WeaponId>("rifle");
+  function selectWeapon(w: WeaponId) {
+    controls.current.weapon = w;
+    setWeaponState(w);
+  }
+  function triggerJump() {
+    controls.current.jump = true;
+    setTimeout(() => { controls.current.jump = false; }, 80);
+  }
   const [feed, setFeed] = useState<{ id: number; msg: string }[]>([]);
   const feedId = useRef(0);
   const [playerCount, setPlayerCount] = useState(1);
@@ -366,14 +375,16 @@ function Game() {
     });
   }
 
-  function handleShoot(_s: ShotEvent, hitId: string | null) {
+  function handleShoot(_s: ShotEvent, hits: { id: string; damage: number }[]) {
     const ch = channelRef.current;
-    if (!ch || !hitId) return;
-    ch.send({
-      type: "broadcast",
-      event: "hit",
-      payload: { targetId: hitId, damage: 34, shooterName: myNameRef.current },
-    });
+    if (!ch) return;
+    for (const h of hits) {
+      ch.send({
+        type: "broadcast",
+        event: "hit",
+        payload: { targetId: h.id, damage: h.damage, shooterName: myNameRef.current },
+      });
+    }
   }
 
   function handleLocalDeath() {
@@ -476,6 +487,10 @@ function Game() {
       const k = e.key.toLowerCase();
       keys[k] = true;
       if (k === "r") triggerReload();
+      if (k === " " || k === "spacebar") { e.preventDefault(); triggerJump(); }
+      if (k === "1") selectWeapon("rifle");
+      if (k === "2") selectWeapon("sniper");
+      if (k === "3") selectWeapon("rpg");
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -604,10 +619,36 @@ function Game() {
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-right backdrop-blur">
             <div className="flex items-center gap-2 text-sm font-bold text-accent">
-              <Zap className="size-4" /> {hud.ammo}/30
+              <Zap className="size-4" /> {hud.reloading ? "RELOAD…" : `${hud.ammo}/${hud.maxAmmo}`}
+            </div>
+            <div className="mt-0.5 text-[10px] font-display uppercase tracking-widest text-primary">
+              {WEAPONS[hud.weapon].name}
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Weapon selector */}
+      <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex gap-1.5">
+        {(["rifle","sniper","rpg"] as WeaponId[]).map((w, i) => {
+          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : Rocket;
+          const active = weapon === w;
+          return (
+            <button
+              key={w}
+              onClick={() => selectWeapon(w)}
+              className={`grid size-12 place-items-center rounded-md border backdrop-blur ${
+                active
+                  ? "border-accent bg-accent/30 text-accent shadow-[0_0_16px_var(--accent)]"
+                  : "border-border bg-black/60 text-muted-foreground"
+              }`}
+              title={`${WEAPONS[w].name} (${i + 1})`}
+            >
+              <Icon className="size-5" />
+              <span className="sr-only">{WEAPONS[w].name}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Chat toggle + panel */}
@@ -713,13 +754,22 @@ function Game() {
           >
             <RotateCw className="size-7" />
           </button>
+
+          {/* Jump button */}
+          <button
+            onTouchStart={(e) => { e.preventDefault(); triggerJump(); }}
+            className="absolute right-6 bottom-56 grid size-16 place-items-center rounded-full border-2 border-primary/60 bg-black/50 text-primary backdrop-blur active:bg-primary/30"
+            aria-label="Jump"
+          >
+            <ChevronUp className="size-8" />
+          </button>
         </>
       )}
 
       {platform === "pc" && document.pointerLockElement !== rootRef.current && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
-            Click to play · WASD move · Mouse aim · Click fire · R reload
+            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1/2/3 weapon
           </div>
         </div>
       )}

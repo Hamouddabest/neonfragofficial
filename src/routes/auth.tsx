@@ -46,12 +46,18 @@ function AuthPage() {
     setBusy(true);
     try {
       if (isSignup) {
+        const desired = (username || email.split("@")[0]).trim();
+        if (desired.length < 2) throw new Error("Callsign must be at least 2 characters");
+        // Precheck: no impersonation
+        const { data: available, error: rpcErr } = await supabase.rpc("check_username_available", { candidate: desired });
+        if (rpcErr) throw rpcErr;
+        if (available === false) throw new Error(`Callsign "${desired}" is already taken. Choose another.`);
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: { username: username || email.split("@")[0] },
+            data: { username: desired },
           },
         });
         if (error) throw error;

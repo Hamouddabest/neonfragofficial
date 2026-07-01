@@ -4,12 +4,37 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 const ARENA = 30;
+const EYE = 1.6;
+const PLAYER_RADIUS = 0.4;
+const GRAVITY = 22;
+const JUMP_VELOCITY = 8.5;
+
+export type WeaponId = "rifle" | "sniper" | "rpg";
+export type WeaponSpec = {
+  id: WeaponId;
+  name: string;
+  cooldownMs: number;
+  magazine: number;
+  reloadMs: number;
+  damage: number;
+  splashRadius: number; // 0 = no splash
+  maxRange: number;
+  color: string;
+};
+export const WEAPONS: Record<WeaponId, WeaponSpec> = {
+  rifle:  { id: "rifle",  name: "Rifle",  cooldownMs: 180, magazine: 30, reloadMs: 1500, damage: 34, splashRadius: 0, maxRange: 80, color: "#22d3ee" },
+  sniper: { id: "sniper", name: "Sniper", cooldownMs: 900, magazine: 5,  reloadMs: 2200, damage: 95, splashRadius: 0, maxRange: 200, color: "#a78bfa" },
+  rpg:    { id: "rpg",    name: "RPG",    cooldownMs: 1200,magazine: 3,  reloadMs: 2800, damage: 75, splashRadius: 4.5, maxRange: 60, color: "#f97316" },
+};
 
 export type GameState = {
   hp: number;
   kills: number;
   deaths: number;
   ammo: number;
+  maxAmmo: number;
+  weapon: WeaponId;
+  reloading: boolean;
 };
 
 export type Controls = {
@@ -19,6 +44,8 @@ export type Controls = {
   pitch: number;
   fire: boolean;
   reload: boolean;
+  jump: boolean;
+  weapon: WeaponId;
 };
 
 export type RemotePlayer = {
@@ -48,10 +75,12 @@ export type ShotEvent = {
 };
 
 export type ArenaBlock =
-  | { id: string; kind: "cube"; x: number; z: number; rot: number }
-  | { id: string; kind: "plate"; x: number; z: number; rot: number }
-  | { id: string; kind: "cylinder"; x: number; z: number; rot: number }
-  | { id: string; kind: "stairs"; x: number; z: number; rot: number };
+  | { id: string; kind: "cube";     x: number; z: number; y?: number; rot: number }
+  | { id: string; kind: "plate";    x: number; z: number; y?: number; rot: number }
+  | { id: string; kind: "cylinder"; x: number; z: number; y?: number; rot: number }
+  | { id: string; kind: "stairs";   x: number; z: number; y?: number; rot: number }
+  | { id: string; kind: "jumppad";  x: number; z: number; y?: number; rot: number }
+  | { id: string; kind: "speedpad"; x: number; z: number; y?: number; rot: number };
 
 export type SpawnPoint = { id: string; x: number; z: number };
 
@@ -59,6 +88,17 @@ export type CustomArena = {
   blocks: ArenaBlock[];
   spawnPoints: SpawnPoint[];
 };
+
+// Block AABB helpers (bottom Y, top Y, half-extent XZ)
+export function blockBox(b: ArenaBlock): { min: THREE.Vector3; max: THREE.Vector3; solid: boolean; pad: null | "jump" | "speed" } {
+  const y = b.y ?? 0;
+  if (b.kind === "cube")     return { min: new THREE.Vector3(b.x - 1, y, b.z - 1), max: new THREE.Vector3(b.x + 1, y + 2, b.z + 1), solid: true, pad: null };
+  if (b.kind === "plate")    return { min: new THREE.Vector3(b.x - 1, y, b.z - 1), max: new THREE.Vector3(b.x + 1, y + 0.4, b.z + 1), solid: true, pad: null };
+  if (b.kind === "cylinder") return { min: new THREE.Vector3(b.x - 1, y, b.z - 1), max: new THREE.Vector3(b.x + 1, y + 2, b.z + 1), solid: true, pad: null };
+  if (b.kind === "stairs")   return { min: new THREE.Vector3(b.x - 1, y, b.z - 1), max: new THREE.Vector3(b.x + 1, y + 1.5, b.z + 1), solid: true, pad: null };
+  if (b.kind === "jumppad")  return { min: new THREE.Vector3(b.x - 1, y, b.z - 1), max: new THREE.Vector3(b.x + 1, y + 0.3, b.z + 1), solid: true, pad: "jump" };
+  return                          { min: new THREE.Vector3(b.x - 1, y, b.z - 1), max: new THREE.Vector3(b.x + 1, y + 0.15, b.z + 1), solid: true, pad: "speed" };
+}
 
 export function ArenaScene({
   controls,
@@ -80,7 +120,7 @@ export function ArenaScene({
   remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
   remoteIds: string[];
   onPose: (p: PlayerPose) => void;
-  onShoot: (s: ShotEvent, hitId: string | null) => void;
+  onShoot: (s: ShotEvent, hits: { id: string; damage: number }[], weapon: WeaponId, impact?: { x: number; y: number; z: number }) => void;
   incomingHitRef: React.MutableRefObject<number>;
   onLocalDeath: (killerName: string) => void;
   onFireSound?: () => void;
@@ -88,8 +128,9 @@ export function ArenaScene({
   customArena?: CustomArena | null;
 }) {
   const fireRef = useRef(0);
+  const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
   return (
-    <Canvas shadows camera={{ fov: 75, near: 0.05, far: 200 }}>
+    <Canvas shadows camera={{ fov: 75, near: 0.05, far: 300 }}>
       <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
       <ambientLight intensity={0.45} />
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
@@ -110,8 +151,11 @@ export function ArenaScene({
         onFireSound={onFireSound}
         onReloadSound={onReloadSound}
         spawnPoints={customArena?.spawnPoints}
+        blocks={customArena?.blocks}
+        explosionsRef={explosionsRef}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} />
+      <Explosions explosionsRef={explosionsRef} />
     </Canvas>
   );
 }
@@ -138,7 +182,7 @@ function RemotePlayerView({
   useFrame((_, dt) => {
     const r = remotePlayersRef.current.get(id);
     if (!r || !ref.current) return;
-    ref.current.position.set(r.x, r.y - 0.9, r.z);
+    ref.current.position.set(r.x, r.y, r.z);
     ref.current.rotation.y = r.yaw;
     ref.current.visible = r.alive;
     if (r.name && r.name !== name) setName(r.name);
@@ -286,48 +330,122 @@ function Game({
   onFireSound,
   onReloadSound,
   spawnPoints,
+  blocks,
+  explosionsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
   onKillFeed: (msg: string) => void;
   remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
   onPose: (p: PlayerPose) => void;
-  onShoot: (s: ShotEvent, hitId: string | null) => void;
+  onShoot: (s: ShotEvent, hits: { id: string; damage: number }[], weapon: WeaponId, impact?: { x: number; y: number; z: number }) => void;
   incomingHitRef: React.MutableRefObject<number>;
   onLocalDeath: (killerName: string) => void;
   fireRef: React.MutableRefObject<number>;
   onFireSound?: () => void;
   onReloadSound?: () => void;
   spawnPoints?: SpawnPoint[];
+  blocks?: ArenaBlock[];
+  explosionsRef: React.MutableRefObject<{ x: number; y: number; z: number; t: number }[]>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
     if (spawnPoints && spawnPoints.length > 0) {
       const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
-      return new THREE.Vector3(sp.x, 1.6, sp.z);
+      return new THREE.Vector3(sp.x, EYE, sp.z);
     }
-    return new THREE.Vector3(0, 1.6, 8);
+    return new THREE.Vector3(0, EYE, 8);
   };
-  const player = useRef({ pos: pickSpawn(), hp: 100, kills: 0, deaths: 0, ammo: 30 });
+  const player = useRef({
+    pos: pickSpawn(),
+    vy: 0,
+    grounded: true,
+    hp: 100,
+    kills: 0,
+    deaths: 0,
+    ammo: { rifle: 30, sniper: 5, rpg: 3 } as Record<WeaponId, number>,
+    speedBoostUntil: 0,
+    lastPad: 0,
+  });
   const lastFire = useRef(0);
   const muzzleFlash = useRef<{ t: number }>({ t: 0 });
   const lastPose = useRef(0);
   const remoteGroup = useRef<THREE.Group>(null);
   const reloadEnd = useRef(0);
+  const reloadWeapon = useRef<WeaponId>("rifle");
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
   }, [camera]);
 
+  // Precompute solid block AABBs each frame (custom arena is stable via reference)
+  const solidBoxes = useMemo(() => (blocks ?? []).map((b) => ({ block: b, box: blockBox(b) })), [blocks]);
+
+  function floorAt(x: number, z: number, currentY: number): { top: number; pad: null | "jump" | "speed" } {
+    let top = 0;
+    let pad: null | "jump" | "speed" = null;
+    for (const { block, box } of solidBoxes) {
+      if (x < box.min.x - PLAYER_RADIUS || x > box.max.x + PLAYER_RADIUS) continue;
+      if (z < box.min.z - PLAYER_RADIUS || z > box.max.z + PLAYER_RADIUS) continue;
+      let surface = box.max.y;
+      if (block.kind === "stairs") {
+        // Ramp: height rises with local +z (before rotation). Rotate world -> local.
+        const rot = block.rot ?? 0;
+        const dx = x - block.x, dz = z - block.z;
+        const lz = -Math.sin(-rot) * dx + Math.cos(-rot) * dz;
+        const t = THREE.MathUtils.clamp((lz + 1) / 2, 0, 1);
+        surface = (block.y ?? 0) + t * 1.5;
+      }
+      // "top" must be at or below the head to count as standing surface
+      if (surface <= currentY + 0.01 && surface > top) {
+        top = surface;
+        pad = box.pad;
+      }
+    }
+    return { top, pad };
+  }
+
+  function collideXZ(pos: THREE.Vector3, feetY: number) {
+    // Push out horizontally from any solid block whose vertical span overlaps [feetY, feetY+1.6]
+    for (const { block, box } of solidBoxes) {
+      if (block.kind === "stairs" || box.pad) continue; // walkable
+      const headY = feetY + EYE;
+      if (box.max.y <= feetY + 0.05) continue; // walkable on top
+      if (box.min.y >= headY) continue; // above head
+      // Closest point on box XZ
+      const cx = THREE.MathUtils.clamp(pos.x, box.min.x, box.max.x);
+      const cz = THREE.MathUtils.clamp(pos.z, box.min.z, box.max.z);
+      const dx = pos.x - cx;
+      const dz = pos.z - cz;
+      const d = Math.hypot(dx, dz);
+      if (d < PLAYER_RADIUS && d > 0) {
+        const push = (PLAYER_RADIUS - d) / d;
+        pos.x += dx * push;
+        pos.z += dz * push;
+      } else if (d === 0) {
+        pos.x = box.max.x + PLAYER_RADIUS;
+      }
+    }
+  }
+
   useFrame((_, dt) => {
     const c = controls.current;
     const now = performance.now();
+    const weapon = c.weapon ?? "rifle";
+    const spec = WEAPONS[weapon];
+
     // camera rotation
     const euler = new THREE.Euler(c.pitch, c.yaw, 0, "YXZ");
     camera.quaternion.setFromEuler(euler);
+    // FOV zoom for sniper
+    const persp = camera as THREE.PerspectiveCamera;
+    const targetFov = weapon === "sniper" && !c.fire ? 55 : weapon === "sniper" && c.fire ? 35 : 75;
+    persp.fov += (targetFov - persp.fov) * Math.min(1, dt * 8);
+    persp.updateProjectionMatrix();
 
     // movement relative to yaw
-    const speed = 6;
+    const boost = now < player.current.speedBoostUntil ? 1.9 : 1;
+    const speed = 6 * boost;
     const forward = new THREE.Vector3(-Math.sin(c.yaw), 0, -Math.cos(c.yaw));
     const right = new THREE.Vector3(Math.cos(c.yaw), 0, -Math.sin(c.yaw));
     const move = new THREE.Vector3()
@@ -336,6 +454,39 @@ function Game({
     player.current.pos.add(move);
     player.current.pos.x = THREE.MathUtils.clamp(player.current.pos.x, -ARENA + 1, ARENA - 1);
     player.current.pos.z = THREE.MathUtils.clamp(player.current.pos.z, -ARENA + 1, ARENA - 1);
+
+    // Horizontal collision resolution against solid blocks
+    const feetY = player.current.pos.y - EYE;
+    collideXZ(player.current.pos, feetY);
+
+    // Vertical: gravity + jump + floor snap
+    player.current.vy -= GRAVITY * dt;
+    player.current.pos.y += player.current.vy * dt;
+    const { top: floorTop, pad } = floorAt(player.current.pos.x, player.current.pos.z, player.current.pos.y);
+    const feetNow = player.current.pos.y - EYE;
+    if (feetNow <= floorTop) {
+      player.current.pos.y = floorTop + EYE;
+      const wasFalling = player.current.vy < -1;
+      player.current.vy = 0;
+      player.current.grounded = true;
+      // Pad effects (throttled to avoid re-trigger while standing)
+      if (pad === "jump" && wasFalling && now - player.current.lastPad > 200) {
+        player.current.vy = JUMP_VELOCITY * 1.9;
+        player.current.grounded = false;
+        player.current.lastPad = now;
+      } else if (pad === "speed" && now - player.current.lastPad > 200) {
+        player.current.speedBoostUntil = now + 2500;
+        player.current.lastPad = now;
+      }
+    } else {
+      player.current.grounded = false;
+    }
+    // Jump input
+    if (c.jump && player.current.grounded) {
+      player.current.vy = JUMP_VELOCITY;
+      player.current.grounded = false;
+    }
+
     camera.position.copy(player.current.pos);
 
     // Apply incoming damage from network
@@ -347,30 +498,33 @@ function Game({
         player.current.deaths += 1;
         const sp = pickSpawn();
         player.current.pos.set(sp.x, sp.y, sp.z);
+        player.current.vy = 0;
         onLocalDeath("");
       }
     }
 
-    // Reload trigger
-    if (c.reload && reloadEnd.current === 0 && player.current.ammo < 30 && player.current.hp > 0) {
-      reloadEnd.current = now + 1500;
+    // Reload trigger (per current weapon)
+    if (c.reload && reloadEnd.current === 0 && player.current.ammo[weapon] < spec.magazine && player.current.hp > 0) {
+      reloadEnd.current = now + spec.reloadMs;
+      reloadWeapon.current = weapon;
       onReloadSound?.();
     }
     if (reloadEnd.current > 0 && now >= reloadEnd.current) {
-      player.current.ammo = 30;
+      player.current.ammo[reloadWeapon.current] = WEAPONS[reloadWeapon.current].magazine;
       reloadEnd.current = 0;
     }
-    // Auto-reload when empty
-    if (player.current.ammo <= 0 && reloadEnd.current === 0 && player.current.hp > 0) {
-      reloadEnd.current = now + 1500;
+    // Auto-reload when current weapon empty
+    if (player.current.ammo[weapon] <= 0 && reloadEnd.current === 0 && player.current.hp > 0) {
+      reloadEnd.current = now + spec.reloadMs;
+      reloadWeapon.current = weapon;
       onReloadSound?.();
     }
 
     const reloading = reloadEnd.current > 0;
     // Fire
-    if (c.fire && !reloading && now - lastFire.current > 180 && player.current.ammo > 0 && player.current.hp > 0) {
+    if (c.fire && !reloading && now - lastFire.current > spec.cooldownMs && player.current.ammo[weapon] > 0 && player.current.hp > 0) {
       lastFire.current = now;
-      player.current.ammo -= 1;
+      player.current.ammo[weapon] -= 1;
       muzzleFlash.current.t = now;
       fireRef.current = now;
       onFireSound?.();
@@ -378,16 +532,34 @@ function Game({
       const origin = camera.position.clone();
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      const ray = new THREE.Raycaster(origin, dir, 0.1, 80);
-      let best: { id: string; dist: number } | null = null;
+      const ray = new THREE.Raycaster(origin, dir, 0.1, spec.maxRange);
+      let best: { id: string; dist: number; point: THREE.Vector3 } | null = null;
       for (const r of remotePlayersRef.current.values()) {
         if (!r.alive) continue;
-        const sphere = new THREE.Sphere(new THREE.Vector3(r.x, 1.1, r.z), 0.7);
+        const sphere = new THREE.Sphere(new THREE.Vector3(r.x, r.y + 0.2, r.z), 0.75);
         const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
         if (hit) {
           const dist = hit.distanceTo(origin);
-          if (!best || dist < best.dist) best = { id: r.id, dist };
+          if (!best || dist < best.dist) best = { id: r.id, dist, point: hit };
         }
+      }
+      const hits: { id: string; damage: number }[] = [];
+      let impact: { x: number; y: number; z: number } | undefined;
+      if (spec.splashRadius > 0) {
+        // RPG — impact point is either the direct hit or max-range point
+        const impactPoint = best ? best.point : origin.clone().add(dir.clone().multiplyScalar(spec.maxRange));
+        impact = { x: impactPoint.x, y: impactPoint.y, z: impactPoint.z };
+        explosionsRef.current.push({ ...impact, t: now });
+        for (const r of remotePlayersRef.current.values()) {
+          if (!r.alive) continue;
+          const d = new THREE.Vector3(r.x, r.y, r.z).distanceTo(impactPoint);
+          if (d <= spec.splashRadius) {
+            const dmg = Math.round(spec.damage * (1 - d / spec.splashRadius));
+            if (dmg > 0) hits.push({ id: r.id, damage: dmg });
+          }
+        }
+      } else if (best) {
+        hits.push({ id: best.id, damage: spec.damage });
       }
       onShoot(
         {
@@ -395,12 +567,15 @@ function Game({
           dx: dir.x, dy: dir.y, dz: dir.z,
           shooterId: "", shooterName: "",
         },
-        best?.id ?? null,
+        hits, weapon, impact,
       );
-      if (best) {
-        player.current.kills += 1;
-        const r = remotePlayersRef.current.get(best.id);
-        if (r) onKillFeed(`You eliminated ${r.name}`);
+      for (const h of hits) {
+        const r = remotePlayersRef.current.get(h.id);
+        if (r) {
+          player.current.kills += (h.damage >= 90 || spec.splashRadius > 0) ? 1 : 0;
+          if (h.damage >= 90) onKillFeed(`You eliminated ${r.name}`);
+          else if (spec.splashRadius > 0) onKillFeed(`You blasted ${r.name}`);
+        }
       }
     }
 
@@ -409,7 +584,7 @@ function Game({
       lastPose.current = now;
       onPose({
         x: player.current.pos.x,
-        y: player.current.pos.y,
+        y: player.current.pos.y - EYE,
         z: player.current.pos.z,
         yaw: c.yaw,
         pitch: c.pitch,
@@ -421,7 +596,10 @@ function Game({
       hp: Math.max(0, Math.round(player.current.hp)),
       kills: player.current.kills,
       deaths: player.current.deaths,
-      ammo: Math.floor(player.current.ammo),
+      ammo: Math.floor(player.current.ammo[weapon]),
+      maxAmmo: spec.magazine,
+      weapon,
+      reloading: reloadEnd.current > 0,
     });
   });
 
@@ -461,9 +639,10 @@ function CustomArenaWorld({ blocks, spawnPoints }: { blocks: ArenaBlock[]; spawn
 }
 
 export function ArenaBlockMesh({ block }: { block: ArenaBlock }) {
+  const yb = block.y ?? 0;
   if (block.kind === "cube") {
     return (
-      <mesh position={[block.x, 1, block.z]} castShadow receiveShadow>
+      <mesh position={[block.x, yb + 1, block.z]} castShadow receiveShadow>
         <boxGeometry args={[2, 2, 2]} />
         <meshStandardMaterial color="#2a1f4a" emissive="#ec4899" emissiveIntensity={0.3} />
       </mesh>
@@ -471,7 +650,7 @@ export function ArenaBlockMesh({ block }: { block: ArenaBlock }) {
   }
   if (block.kind === "plate") {
     return (
-      <mesh position={[block.x, 0.2, block.z]} castShadow receiveShadow>
+      <mesh position={[block.x, yb + 0.2, block.z]} castShadow receiveShadow>
         <boxGeometry args={[2, 0.4, 2]} />
         <meshStandardMaterial color="#221b3d" emissive="#22d3ee" emissiveIntensity={0.3} />
       </mesh>
@@ -479,19 +658,81 @@ export function ArenaBlockMesh({ block }: { block: ArenaBlock }) {
   }
   if (block.kind === "cylinder") {
     return (
-      <mesh position={[block.x, 1, block.z]} castShadow receiveShadow>
+      <mesh position={[block.x, yb + 1, block.z]} castShadow receiveShadow>
         <cylinderGeometry args={[1, 1, 2, 24]} />
         <meshStandardMaterial color="#2a1f4a" emissive="#a78bfa" emissiveIntensity={0.4} />
       </mesh>
     );
   }
-  // stairs — 3 steps
+  if (block.kind === "stairs") {
+    return (
+      <group position={[block.x, yb, block.z]} rotation={[0, block.rot ?? 0, 0]}>
+        {[0, 1, 2].map((i) => (
+          <mesh key={i} position={[0, 0.25 + i * 0.5, -0.66 + i * 0.66]} castShadow receiveShadow>
+            <boxGeometry args={[2, 0.5, 0.66]} />
+            <meshStandardMaterial color="#2a1f4a" emissive="#22d3ee" emissiveIntensity={0.25} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+  if (block.kind === "jumppad") {
+    return (
+      <group position={[block.x, yb, block.z]}>
+        <mesh position={[0, 0.15, 0]} receiveShadow>
+          <boxGeometry args={[2, 0.3, 2]} />
+          <meshStandardMaterial color="#0f172a" emissive="#22d3ee" emissiveIntensity={1.6} toneMapped={false} />
+        </mesh>
+        <mesh position={[0, 0.35, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.55, 0.85, 24]} />
+          <meshBasicMaterial color="#22d3ee" toneMapped={false} />
+        </mesh>
+        <pointLight position={[0, 1, 0]} color="#22d3ee" intensity={2} distance={4} />
+      </group>
+    );
+  }
+  // speedpad
   return (
-    <group position={[block.x, 0, block.z]} rotation={[0, block.rot ?? 0, 0]}>
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} position={[0, 0.25 + i * 0.5, -0.66 + i * 0.66]} castShadow receiveShadow>
-          <boxGeometry args={[2, 0.5, 0.66]} />
-          <meshStandardMaterial color="#2a1f4a" emissive="#22d3ee" emissiveIntensity={0.25} />
+    <group position={[block.x, yb, block.z]} rotation={[0, block.rot ?? 0, 0]}>
+      <mesh position={[0, 0.075, 0]} receiveShadow>
+        <boxGeometry args={[2, 0.15, 2]} />
+        <meshStandardMaterial color="#0f172a" emissive="#f97316" emissiveIntensity={1.4} toneMapped={false} />
+      </mesh>
+      {[-0.5, 0, 0.5].map((zo, i) => (
+        <mesh key={i} position={[0, 0.17, zo]}>
+          <coneGeometry args={[0.28, 0.6, 3]} />
+          <meshBasicMaterial color="#fef08a" toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function Explosions({ explosionsRef }: { explosionsRef: React.MutableRefObject<{ x: number; y: number; z: number; t: number }[]> }) {
+  const group = useRef<THREE.Group>(null);
+  const [, force] = useState(0);
+  useFrame(() => {
+    const now = performance.now();
+    const before = explosionsRef.current.length;
+    explosionsRef.current = explosionsRef.current.filter((e) => now - e.t < 500);
+    if (explosionsRef.current.length !== before) force((n) => n + 1);
+    if (!group.current) return;
+    group.current.children.forEach((child, i) => {
+      const e = explosionsRef.current[i];
+      if (!e) return;
+      const a = (now - e.t) / 500;
+      const s = 0.5 + a * 5;
+      child.scale.setScalar(s);
+      const m = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      m.opacity = 1 - a;
+    });
+  });
+  return (
+    <group ref={group}>
+      {explosionsRef.current.map((e, i) => (
+        <mesh key={i} position={[e.x, e.y, e.z]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshBasicMaterial color="#f97316" transparent opacity={1} toneMapped={false} />
         </mesh>
       ))}
     </group>
