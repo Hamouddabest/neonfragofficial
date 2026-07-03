@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, WEAPONS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -43,6 +43,22 @@ function Game() {
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [customArena, setCustomArena] = useState<CustomArena | null>(null);
+
+  // Player settings (persisted in localStorage)
+  const [fov, setFov] = useState<number>(() => {
+    if (typeof window === "undefined") return 75;
+    const v = Number(window.localStorage.getItem("neonfrag.fov"));
+    return Number.isFinite(v) && v >= 60 && v <= 110 ? v : 75;
+  });
+  const [viewBobbing, setViewBobbing] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("neonfrag.bobbing") !== "0";
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.fov", String(fov)); } catch { /* noop */ } }, [fov]);
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.bobbing", viewBobbing ? "1" : "0"); } catch { /* noop */ } }, [viewBobbing]);
+
+  function setZoom(on: boolean) { controls.current.zoom = on; }
 
   useEffect(() => {
     let cancelled = false;
