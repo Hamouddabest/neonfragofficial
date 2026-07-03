@@ -46,6 +46,7 @@ export type Controls = {
   reload: boolean;
   jump: boolean;
   weapon: WeaponId;
+  zoom: boolean;
 };
 
 export type RemotePlayer = {
@@ -113,6 +114,8 @@ export function ArenaScene({
   onFireSound,
   onReloadSound,
   customArena,
+  fov = 75,
+  viewBobbing = true,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -126,11 +129,13 @@ export function ArenaScene({
   onFireSound?: () => void;
   onReloadSound?: () => void;
   customArena?: CustomArena | null;
+  fov?: number;
+  viewBobbing?: boolean;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
   return (
-    <Canvas shadows camera={{ fov: 75, near: 0.05, far: 300 }}>
+    <Canvas shadows camera={{ fov, near: 0.05, far: 300 }}>
       <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
       <ambientLight intensity={0.45} />
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
@@ -153,8 +158,9 @@ export function ArenaScene({
         spawnPoints={customArena?.spawnPoints}
         blocks={customArena?.blocks}
         explosionsRef={explosionsRef}
+        fov={fov}
       />
-      <ViewmodelGun controls={controls} fireRef={fireRef} />
+      <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
     </Canvas>
   );
