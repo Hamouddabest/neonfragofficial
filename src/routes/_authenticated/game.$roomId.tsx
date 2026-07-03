@@ -698,6 +698,13 @@ function Game() {
             >
               {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
             </button>
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              className="flex items-center gap-1 rounded-md bg-black/60 px-3 py-2 text-xs font-display uppercase tracking-widest text-primary backdrop-blur"
+              aria-label="Settings"
+            >
+              <SettingsIcon className="size-4" />
+            </button>
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
             <div>{mode}</div>
@@ -893,6 +900,17 @@ function Game() {
           >
             <ChevronUp className="size-8" />
           </button>
+
+          {/* Zoom button (hold) */}
+          <button
+            onTouchStart={(e) => { e.preventDefault(); setZoom(true); }}
+            onTouchEnd={(e) => { e.preventDefault(); setZoom(false); }}
+            onTouchCancel={(e) => { e.preventDefault(); setZoom(false); }}
+            className="absolute right-32 bottom-56 grid size-14 place-items-center rounded-full border-2 border-accent/60 bg-black/50 text-accent backdrop-blur active:bg-accent/30"
+            aria-label="Zoom"
+          >
+            <Search className="size-6" />
+          </button>
         </>
       )}
 
@@ -905,6 +923,46 @@ function Game() {
       )}
 
       {/* Platform selection modal */}
+      {settingsOpen && (
+        <div className="absolute right-3 top-16 z-40 w-72 rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-display text-sm uppercase tracking-widest text-primary">Settings</h3>
+            <button onClick={() => setSettingsOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close settings">
+              <X className="size-4" />
+            </button>
+          </div>
+          <label className="block text-xs font-display uppercase tracking-widest text-accent">
+            Field of View: <span className="text-primary">{fov}°</span>
+          </label>
+          <input
+            type="range"
+            min={60}
+            max={110}
+            step={1}
+            value={fov}
+            onChange={(e) => setFov(Number(e.target.value))}
+            className="mt-2 w-full accent-[var(--primary)]"
+          />
+          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+            <span>60</span><span>75</span><span>90</span><span>110</span>
+          </div>
+          <label className="mt-4 flex items-center justify-between text-xs font-display uppercase tracking-widest text-accent">
+            <span>View bobbing</span>
+            <button
+              type="button"
+              onClick={() => setViewBobbing((v) => !v)}
+              className={`relative h-6 w-11 rounded-full border transition-colors ${viewBobbing ? "border-accent bg-accent/40" : "border-border bg-black/60"}`}
+              aria-pressed={viewBobbing}
+            >
+              <span className={`absolute top-0.5 size-5 rounded-full transition-all ${viewBobbing ? "left-[22px] bg-accent shadow-[0_0_10px_var(--accent)]" : "left-0.5 bg-muted-foreground"}`} />
+            </button>
+          </label>
+          <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+            Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC.
+          </p>
+        </div>
+      )}
+
       {platform === "none" && (
         <div className="absolute inset-0 z-50 grid place-items-center bg-black/90 backdrop-blur">
           <div className="w-[90%] max-w-md rounded-lg border border-primary/40 bg-black/80 p-6 text-center">
