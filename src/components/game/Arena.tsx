@@ -338,6 +338,7 @@ function Game({
   spawnPoints,
   blocks,
   explosionsRef,
+  fov = 75,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -353,6 +354,7 @@ function Game({
   spawnPoints?: SpawnPoint[];
   blocks?: ArenaBlock[];
   explosionsRef: React.MutableRefObject<{ x: number; y: number; z: number; t: number }[]>;
+  fov?: number;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -445,7 +447,11 @@ function Game({
     camera.quaternion.setFromEuler(euler);
     // FOV zoom for sniper
     const persp = camera as THREE.PerspectiveCamera;
-    const targetFov = weapon === "sniper" && !c.fire ? 55 : weapon === "sniper" && c.fire ? 35 : 75;
+    const base = fov;
+    let targetFov = base;
+    if (weapon === "sniper" && c.fire) targetFov = Math.max(20, base - 40);
+    else if (weapon === "sniper") targetFov = Math.max(30, base - 20);
+    if (c.zoom) targetFov = Math.min(targetFov, base * 0.55);
     persp.fov += (targetFov - persp.fov) * Math.min(1, dt * 8);
     persp.updateProjectionMatrix();
 
@@ -749,9 +755,11 @@ function Explosions({ explosionsRef }: { explosionsRef: React.MutableRefObject<{
 function ViewmodelGun({
   controls,
   fireRef,
+  viewBobbing = true,
 }: {
   controls: React.MutableRefObject<Controls>;
   fireRef: React.MutableRefObject<number>;
+  viewBobbing?: boolean;
 }) {
   const { camera } = useThree();
   const group = useRef<THREE.Group>(null);
@@ -769,7 +777,7 @@ function ViewmodelGun({
     g.position.add(right);
 
     // Bob while moving
-    const moving = Math.hypot(controls.current.moveX, controls.current.moveY);
+    const moving = viewBobbing ? Math.hypot(controls.current.moveX, controls.current.moveY) : 0;
     bobPhase.current += dt * (6 + moving * 6);
     const bobY = Math.sin(bobPhase.current) * 0.012 * moving;
     const bobX = Math.cos(bobPhase.current * 0.5) * 0.01 * moving;

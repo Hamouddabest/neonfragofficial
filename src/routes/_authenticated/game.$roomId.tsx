@@ -19,7 +19,7 @@ function Game() {
   const { identity } = useIdentity();
   const { isAdmin } = useIsAdmin();
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId });
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId, zoom: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30, maxAmmo: 30, weapon: "rifle", reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>("rifle");
   function selectWeapon(w: WeaponId) {
