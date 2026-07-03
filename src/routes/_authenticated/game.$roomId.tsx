@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, WEAPONS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -19,7 +19,7 @@ function Game() {
   const { identity } = useIdentity();
   const { isAdmin } = useIsAdmin();
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId });
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId, zoom: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30, maxAmmo: 30, weapon: "rifle", reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>("rifle");
   function selectWeapon(w: WeaponId) {
@@ -43,6 +43,22 @@ function Game() {
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [customArena, setCustomArena] = useState<CustomArena | null>(null);
+
+  // Player settings (persisted in localStorage)
+  const [fov, setFov] = useState<number>(() => {
+    if (typeof window === "undefined") return 75;
+    const v = Number(window.localStorage.getItem("neonfrag.fov"));
+    return Number.isFinite(v) && v >= 60 && v <= 110 ? v : 75;
+  });
+  const [viewBobbing, setViewBobbing] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("neonfrag.bobbing") !== "0";
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.fov", String(fov)); } catch { /* noop */ } }, [fov]);
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.bobbing", viewBobbing ? "1" : "0"); } catch { /* noop */ } }, [viewBobbing]);
+
+  function setZoom(on: boolean) { controls.current.zoom = on; }
 
   useEffect(() => {
     let cancelled = false;
@@ -613,6 +629,7 @@ function Game() {
       controls.current.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, controls.current.pitch));
     };
     const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) { e.preventDefault(); setZoom(true); return; }
       if (e.button !== 0) return;
       if (document.pointerLockElement !== rootRef.current) {
         rootRef.current?.requestPointerLock();
@@ -622,18 +639,22 @@ function Game() {
     };
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) controls.current.fire = false;
+      if (e.button === 2) setZoom(false);
     };
+    const onCtx = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("contextmenu", onCtx);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("contextmenu", onCtx);
     };
   }, [platform]);
 
@@ -652,6 +673,8 @@ function Game() {
         onFireSound={playShoot}
         onReloadSound={playReload}
         customArena={customArena}
+        fov={fov}
+        viewBobbing={viewBobbing}
       />
 
       {/* HUD */}
@@ -674,6 +697,13 @@ function Game() {
               aria-label="Toggle fullscreen"
             >
               {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+            </button>
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              className="flex items-center gap-1 rounded-md bg-black/60 px-3 py-2 text-xs font-display uppercase tracking-widest text-primary backdrop-blur"
+              aria-label="Settings"
+            >
+              <SettingsIcon className="size-4" />
             </button>
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
@@ -870,6 +900,17 @@ function Game() {
           >
             <ChevronUp className="size-8" />
           </button>
+
+          {/* Zoom button (hold) */}
+          <button
+            onTouchStart={(e) => { e.preventDefault(); setZoom(true); }}
+            onTouchEnd={(e) => { e.preventDefault(); setZoom(false); }}
+            onTouchCancel={(e) => { e.preventDefault(); setZoom(false); }}
+            className="absolute right-32 bottom-56 grid size-14 place-items-center rounded-full border-2 border-accent/60 bg-black/50 text-accent backdrop-blur active:bg-accent/30"
+            aria-label="Zoom"
+          >
+            <Search className="size-6" />
+          </button>
         </>
       )}
 
@@ -882,6 +923,46 @@ function Game() {
       )}
 
       {/* Platform selection modal */}
+      {settingsOpen && (
+        <div className="absolute right-3 top-16 z-40 w-72 rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-display text-sm uppercase tracking-widest text-primary">Settings</h3>
+            <button onClick={() => setSettingsOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close settings">
+              <X className="size-4" />
+            </button>
+          </div>
+          <label className="block text-xs font-display uppercase tracking-widest text-accent">
+            Field of View: <span className="text-primary">{fov}°</span>
+          </label>
+          <input
+            type="range"
+            min={60}
+            max={110}
+            step={1}
+            value={fov}
+            onChange={(e) => setFov(Number(e.target.value))}
+            className="mt-2 w-full accent-[var(--primary)]"
+          />
+          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+            <span>60</span><span>75</span><span>90</span><span>110</span>
+          </div>
+          <label className="mt-4 flex items-center justify-between text-xs font-display uppercase tracking-widest text-accent">
+            <span>View bobbing</span>
+            <button
+              type="button"
+              onClick={() => setViewBobbing((v) => !v)}
+              className={`relative h-6 w-11 rounded-full border transition-colors ${viewBobbing ? "border-accent bg-accent/40" : "border-border bg-black/60"}`}
+              aria-pressed={viewBobbing}
+            >
+              <span className={`absolute top-0.5 size-5 rounded-full transition-all ${viewBobbing ? "left-[22px] bg-accent shadow-[0_0_10px_var(--accent)]" : "left-0.5 bg-muted-foreground"}`} />
+            </button>
+          </label>
+          <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+            Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC.
+          </p>
+        </div>
+      )}
+
       {platform === "none" && (
         <div className="absolute inset-0 z-50 grid place-items-center bg-black/90 backdrop-blur">
           <div className="w-[90%] max-w-md rounded-lg border border-primary/40 bg-black/80 p-6 text-center">
