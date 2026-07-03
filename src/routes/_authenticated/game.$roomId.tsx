@@ -815,7 +815,7 @@ function Game() {
             <input
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Message…"
+              placeholder={isAdmin ? "Message… or /help for admin commands" : "Message…"}
               maxLength={140}
               className="flex-1 rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary"
             />
