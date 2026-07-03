@@ -489,10 +489,11 @@ function Game({
 
     camera.position.copy(player.current.pos);
 
-    // Apply incoming damage from network
-    if (incomingHitRef.current > 0 && player.current.hp > 0) {
+    // Apply incoming damage / heal from network
+    if (incomingHitRef.current !== 0 && player.current.hp > 0) {
       player.current.hp -= incomingHitRef.current;
       incomingHitRef.current = 0;
+      if (player.current.hp > 100) player.current.hp = 100;
       if (player.current.hp <= 0) {
         player.current.hp = 100;
         player.current.deaths += 1;

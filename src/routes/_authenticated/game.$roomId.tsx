@@ -4,6 +4,7 @@ import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type Sh
 import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Send, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { Room, RoomEvent, Track, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
 import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/_authenticated/game/$roomId")({
 function Game() {
   const { roomId } = Route.useParams();
   const { identity } = useIdentity();
+  const { isAdmin } = useIsAdmin();
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30, maxAmmo: 30, weapon: "rifle", reloading: false });
@@ -266,6 +268,44 @@ function Game() {
         setChat((c) => [...c, { id, name: p.name, msg: p.msg }].slice(-30));
       });
 
+      channel.on("broadcast", { event: "admin" }, ({ payload }) => {
+        const p = payload as {
+          action: "heal" | "kill" | "kick" | "announce";
+          targetId?: string;
+          adminName: string;
+          msg?: string;
+        };
+        const pushChat = (name: string, msg: string) => {
+          const id = ++chatId.current;
+          setChat((c) => [...c, { id, name, msg }].slice(-30));
+        };
+        const pushFeed = (msg: string) => {
+          const id = ++feedId.current;
+          setFeed((f) => [...f, { id, msg }].slice(-4));
+          setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 3500);
+        };
+        if (p.action === "announce") {
+          pushChat(`★ ${p.adminName}`, p.msg ?? "");
+          pushFeed(`★ ${p.msg ?? ""}`);
+          return;
+        }
+        if (p.action === "heal" && p.targetId === identity.id) {
+          incomingHitRef.current -= 100;
+          pushFeed(`${p.adminName} healed you`);
+          return;
+        }
+        if (p.action === "kill" && p.targetId === identity.id) {
+          incomingHitRef.current += 9999;
+          pushFeed(`${p.adminName} used /kill on you`);
+          return;
+        }
+        if (p.action === "kick" && p.targetId === identity.id) {
+          pushFeed(`${p.adminName} kicked you`);
+          setTimeout(() => { window.location.href = "/play"; }, 400);
+          return;
+        }
+      });
+
       channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           await channel.track({ name: myNameRef.current });
@@ -394,6 +434,11 @@ function Game() {
   function sendChat() {
     const text = chatInput.trim().slice(0, 140);
     if (!text || !channelRef.current) return;
+    if (text.startsWith("/")) {
+      runCommand(text);
+      setChatInput("");
+      return;
+    }
     channelRef.current.send({
       type: "broadcast",
       event: "chat",
@@ -402,6 +447,68 @@ function Game() {
     const id = ++chatId.current;
     setChat((c) => [...c, { id, name: myNameRef.current, msg: text }].slice(-30));
     setChatInput("");
+  }
+
+  function localSystem(msg: string) {
+    const id = ++chatId.current;
+    setChat((c) => [...c, { id, name: "SYSTEM", msg }].slice(-30));
+  }
+
+  function resolveTargetId(name: string): string | null {
+    const n = name.trim().toLowerCase();
+    if (!n) return null;
+    if (n === "me" || n === "self") return myIdRef.current;
+    if (n === myNameRef.current.toLowerCase()) return myIdRef.current;
+    for (const p of remotePlayersRef.current.values()) {
+      if (p.name.toLowerCase() === n) return p.id;
+    }
+    // partial match
+    for (const p of remotePlayersRef.current.values()) {
+      if (p.name.toLowerCase().startsWith(n)) return p.id;
+    }
+    return null;
+  }
+
+  function runCommand(text: string) {
+    const [rawCmd, ...rest] = text.slice(1).split(/\s+/);
+    const cmd = (rawCmd ?? "").toLowerCase();
+    if (cmd === "help") {
+      localSystem(
+        isAdmin
+          ? "Admin: /heal <name|me>  /kill <name>  /kick <name>  /announce <msg>  /players"
+          : "/help  /players — admin commands available to authorized players only",
+      );
+      return;
+    }
+    if (cmd === "players") {
+      const names = [myNameRef.current, ...Array.from(remotePlayersRef.current.values()).map((p) => p.name)];
+      localSystem(`In room: ${names.join(", ")}`);
+      return;
+    }
+    if (!isAdmin) {
+      localSystem("You are not an admin.");
+      return;
+    }
+    const ch = channelRef.current;
+    if (!ch) return;
+    const send = (payload: Record<string, unknown>) =>
+      ch.send({ type: "broadcast", event: "admin", payload: { ...payload, adminName: myNameRef.current } });
+
+    if (cmd === "announce") {
+      const msg = rest.join(" ").slice(0, 140);
+      if (!msg) { localSystem("Usage: /announce <message>"); return; }
+      send({ action: "announce", msg });
+      return;
+    }
+    if (cmd === "heal" || cmd === "kill" || cmd === "kick") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId) { localSystem(`Player "${targetName}" not found.`); return; }
+      send({ action: cmd, targetId });
+      localSystem(`/${cmd} → ${targetName}`);
+      return;
+    }
+    localSystem(`Unknown command: /${cmd}`);
   }
 
   // Touch handlers on root
@@ -708,7 +815,7 @@ function Game() {
             <input
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Message…"
+              placeholder={isAdmin ? "Message… or /help for admin commands" : "Message…"}
               maxLength={140}
               className="flex-1 rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary"
             />
