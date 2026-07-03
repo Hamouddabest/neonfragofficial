@@ -629,6 +629,7 @@ function Game() {
       controls.current.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, controls.current.pitch));
     };
     const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) { e.preventDefault(); setZoom(true); return; }
       if (e.button !== 0) return;
       if (document.pointerLockElement !== rootRef.current) {
         rootRef.current?.requestPointerLock();
@@ -638,18 +639,22 @@ function Game() {
     };
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) controls.current.fire = false;
+      if (e.button === 2) setZoom(false);
     };
+    const onCtx = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("contextmenu", onCtx);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("contextmenu", onCtx);
     };
   }, [platform]);
 
@@ -668,6 +673,8 @@ function Game() {
         onFireSound={playShoot}
         onReloadSound={playReload}
         customArena={customArena}
+        fov={fov}
+        viewBobbing={viewBobbing}
       />
 
       {/* HUD */}
