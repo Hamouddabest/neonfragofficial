@@ -357,6 +357,8 @@ function Game({
   blocks,
   explosionsRef,
   fov = 75,
+  localPosRef,
+  localOpsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -373,6 +375,8 @@ function Game({
   blocks?: ArenaBlock[];
   explosionsRef: React.MutableRefObject<{ x: number; y: number; z: number; t: number }[]>;
   fov?: number;
+  localPosRef?: React.MutableRefObject<LocalPos>;
+  localOpsRef?: React.MutableRefObject<LocalOps>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
