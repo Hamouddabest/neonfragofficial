@@ -10,6 +10,16 @@ const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
 export type WeaponId = "rifle" | "sniper" | "rpg";
+export type Rank = "owner" | "admin" | "player";
+
+export type LocalOps = {
+  teleport: { x: number; z: number } | null;
+  frozen: boolean;
+  god: boolean;
+  speedMult: number;
+};
+
+export type LocalPos = { x: number; y: number; z: number };
 export type WeaponSpec = {
   id: WeaponId;
   name: string;
@@ -57,6 +67,7 @@ export type RemotePlayer = {
   z: number;
   yaw: number;
   alive: boolean;
+  rank?: Rank;
 };
 
 export type PlayerPose = {
@@ -66,6 +77,7 @@ export type PlayerPose = {
   yaw: number;
   pitch: number;
   alive: boolean;
+  rank?: Rank;
 };
 
 export type ShotEvent = {
@@ -116,6 +128,8 @@ export function ArenaScene({
   customArena,
   fov = 75,
   viewBobbing = true,
+  localPosRef,
+  localOpsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -131,6 +145,8 @@ export function ArenaScene({
   customArena?: CustomArena | null;
   fov?: number;
   viewBobbing?: boolean;
+  localPosRef?: React.MutableRefObject<LocalPos>;
+  localOpsRef?: React.MutableRefObject<LocalOps>;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -159,6 +175,8 @@ export function ArenaScene({
         blocks={customArena?.blocks}
         explosionsRef={explosionsRef}
         fov={fov}
+        localPosRef={localPosRef}
+        localOpsRef={localOpsRef}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
@@ -180,6 +198,7 @@ function RemotePlayerView({
   const armR = useRef<THREE.Mesh>(null);
   const prev = useRef({ x: 0, z: 0, phase: 0 });
   const [name, setName] = useState<string>(() => remotePlayersRef.current.get(id)?.name ?? "Rival");
+  const [rank, setRank] = useState<Rank>(() => remotePlayersRef.current.get(id)?.rank ?? "player");
   const color = useMemo(() => {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
@@ -192,6 +211,8 @@ function RemotePlayerView({
     ref.current.rotation.y = r.yaw;
     ref.current.visible = r.alive;
     if (r.name && r.name !== name) setName(r.name);
+    const rk = r.rank ?? "player";
+    if (rk !== rank) setRank(rk);
     // walk animation
     const dx = r.x - prev.current.x;
     const dz = r.z - prev.current.z;
@@ -262,9 +283,25 @@ function RemotePlayerView({
         </mesh>
       </group>
       <Billboard position={[0, 2, 0]}>
+        {rank !== "player" && (
+          <Text
+            position={[0, 0.45, 0]}
+            fontSize={0.28}
+            color={rank === "owner" ? "#fbbf24" : "#f43f5e"}
+            outlineWidth={0.045}
+            outlineColor="#000000"
+            anchorX="center"
+            anchorY="middle"
+            renderOrder={999}
+            material-depthTest={false}
+            material-toneMapped={false}
+          >
+            {rank === "owner" ? "★ OWNER ★" : "◆ ADMIN"}
+          </Text>
+        )}
         <Text
           fontSize={0.35}
-          color="#22d3ee"
+          color={rank === "owner" ? "#fde68a" : rank === "admin" ? "#fecaca" : "#22d3ee"}
           outlineWidth={0.04}
           outlineColor="#000000"
           anchorX="center"
@@ -339,6 +376,8 @@ function Game({
   blocks,
   explosionsRef,
   fov = 75,
+  localPosRef,
+  localOpsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -355,6 +394,8 @@ function Game({
   blocks?: ArenaBlock[];
   explosionsRef: React.MutableRefObject<{ x: number; y: number; z: number; t: number }[]>;
   fov?: number;
+  localPosRef?: React.MutableRefObject<LocalPos>;
+  localOpsRef?: React.MutableRefObject<LocalOps>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -457,13 +498,25 @@ function Game({
 
     // movement relative to yaw
     const boost = now < player.current.speedBoostUntil ? 1.9 : 1;
-    const speed = 6 * boost;
+    const opsMult = localOpsRef?.current.speedMult ?? 1;
+    const frozen = localOpsRef?.current.frozen ?? false;
+    const speed = 6 * boost * opsMult;
+    if (frozen) { c.moveX = 0; c.moveY = 0; }
     const forward = new THREE.Vector3(-Math.sin(c.yaw), 0, -Math.cos(c.yaw));
     const right = new THREE.Vector3(Math.cos(c.yaw), 0, -Math.sin(c.yaw));
     const move = new THREE.Vector3()
       .addScaledVector(forward, c.moveY * speed * dt)
       .addScaledVector(right, c.moveX * speed * dt);
     player.current.pos.add(move);
+
+    // Owner teleport (consume once)
+    if (localOpsRef?.current.teleport) {
+      const tp = localOpsRef.current.teleport;
+      player.current.pos.set(tp.x, EYE + 0.5, tp.z);
+      player.current.vy = 0;
+      localOpsRef.current.teleport = null;
+    }
+
     player.current.pos.x = THREE.MathUtils.clamp(player.current.pos.x, -ARENA + 1, ARENA - 1);
     player.current.pos.z = THREE.MathUtils.clamp(player.current.pos.z, -ARENA + 1, ARENA - 1);
 
@@ -503,7 +556,10 @@ function Game({
 
     // Apply incoming damage / heal from network
     if (incomingHitRef.current !== 0 && player.current.hp > 0) {
-      player.current.hp -= incomingHitRef.current;
+      // God mode: ignore positive damage, still allow negative (heals)
+      const god = localOpsRef?.current.god ?? false;
+      const dmg = god && incomingHitRef.current > 0 ? 0 : incomingHitRef.current;
+      player.current.hp -= dmg;
       incomingHitRef.current = 0;
       if (player.current.hp > 100) player.current.hp = 100;
       if (player.current.hp <= 0) {
@@ -514,6 +570,13 @@ function Game({
         player.current.vy = 0;
         onLocalDeath("");
       }
+    }
+
+    // Publish local pos for proximity voice
+    if (localPosRef) {
+      localPosRef.current.x = player.current.pos.x;
+      localPosRef.current.y = player.current.pos.y;
+      localPosRef.current.z = player.current.pos.z;
     }
 
     // Reload trigger (per current weapon)

@@ -1,12 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, WEAPONS } from "@/components/game/Arena";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, WEAPONS } from "@/components/game/Arena";
 import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
-import { Room, RoomEvent, Track, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
+import { useAuth } from "@/hooks/use-auth";
+import { Room, RoomEvent, Track, RemoteAudioTrack, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
 import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
+
+const OWNER_EMAIL = "totallybro541@gmail.com";
+const PROXIMITY_MAX = 22; // full silence beyond this distance
+const PROXIMITY_NEAR = 2; // full volume within this distance
 
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
@@ -18,6 +23,11 @@ function Game() {
   const { roomId } = Route.useParams();
   const { identity } = useIdentity();
   const { isAdmin } = useIsAdmin();
+  const { user } = useAuth();
+  const isOwner = !!user?.email && user.email.toLowerCase() === OWNER_EMAIL;
+  const myRank: Rank = isOwner ? "owner" : isAdmin ? "admin" : "player";
+  const myRankRef = useRef<Rank>("player");
+  useEffect(() => { myRankRef.current = myRank; }, [myRank]);
   const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId, zoom: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30, maxAmmo: 30, weapon: "rifle", reloading: false });
@@ -43,6 +53,10 @@ function Game() {
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [customArena, setCustomArena] = useState<CustomArena | null>(null);
+
+  // Refs plumbed into ArenaScene
+  const localPosRef = useRef<LocalPos>({ x: 0, y: 1.6, z: 8 });
+  const localOpsRef = useRef<LocalOps>({ teleport: null, frozen: false, god: false, speedMult: 1 });
 
   // Player settings (persisted in localStorage)
   const [fov, setFov] = useState<number>(() => {
@@ -232,7 +246,7 @@ function Game() {
       channelRef.current = channel;
 
       channel.on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState() as Record<string, { name?: string }[]>;
+        const state = channel.presenceState() as Record<string, { name?: string; rank?: Rank }[]>;
         const ids = Object.keys(state);
         setPlayerCount(ids.length);
         // drop disconnected
@@ -245,19 +259,21 @@ function Game() {
           if (!remotePlayersRef.current.has(id)) {
             const name = state[id]?.[0]?.name ?? "Rival";
             remotePlayersRef.current.set(id, {
-              id, name, x: 0, y: 0.9, z: 0, yaw: 0, alive: true,
+              id, name, x: 0, y: 0.9, z: 0, yaw: 0, alive: true, rank: state[id]?.[0]?.rank ?? "player",
             });
           }
           // refresh names from presence
           const r = remotePlayersRef.current.get(id);
           const nm = state[id]?.[0]?.name;
           if (r && nm) r.name = nm;
+          const rk = state[id]?.[0]?.rank;
+          if (r && rk) r.rank = rk;
         }
         setRemoteIds(ids.filter((i) => i !== identity.id));
       });
 
       channel.on("broadcast", { event: "pose" }, ({ payload }) => {
-        const p = payload as PlayerPose & { id: string; name: string };
+        const p = payload as PlayerPose & { id: string; name: string; rank?: Rank };
         if (p.id === identity.id) return;
         const existing = remotePlayersRef.current.get(p.id);
         remotePlayersRef.current.set(p.id, {
@@ -266,6 +282,7 @@ function Game() {
           x: p.x, y: p.y, z: p.z,
           yaw: p.yaw,
           alive: p.alive,
+          rank: p.rank ?? existing?.rank ?? "player",
         });
       });
 
@@ -286,10 +303,12 @@ function Game() {
 
       channel.on("broadcast", { event: "admin" }, ({ payload }) => {
         const p = payload as {
-          action: "heal" | "kill" | "kick" | "announce";
+          action: "heal" | "kill" | "kick" | "announce" | "summon" | "freeze" | "unfreeze";
           targetId?: string;
           adminName: string;
           msg?: string;
+          x?: number;
+          z?: number;
         };
         const pushChat = (name: string, msg: string) => {
           const id = ++chatId.current;
@@ -320,11 +339,26 @@ function Game() {
           setTimeout(() => { window.location.href = "/play"; }, 400);
           return;
         }
+        if (p.action === "summon" && p.targetId === identity.id && typeof p.x === "number" && typeof p.z === "number") {
+          localOpsRef.current.teleport = { x: p.x, z: p.z };
+          pushFeed(`${p.adminName} summoned you`);
+          return;
+        }
+        if (p.action === "freeze" && p.targetId === identity.id) {
+          localOpsRef.current.frozen = true;
+          pushFeed(`${p.adminName} froze you`);
+          return;
+        }
+        if (p.action === "unfreeze" && p.targetId === identity.id) {
+          localOpsRef.current.frozen = false;
+          pushFeed(`${p.adminName} unfroze you`);
+          return;
+        }
       });
 
       channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ name: myNameRef.current });
+          await channel.track({ name: myNameRef.current, rank: myRankRef.current });
         }
       });
     })();
@@ -338,6 +372,13 @@ function Game() {
     };
   }, [identity, roomId]);
 
+  // Re-track presence when rank resolves after subscribe
+  useEffect(() => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.track({ name: myNameRef.current, rank: myRank }).catch(() => {});
+  }, [myRank]);
+
   // Connect LiveKit voice room
   useEffect(() => {
     if (!identity) return;
@@ -347,6 +388,7 @@ function Game() {
     setVoiceState("connecting");
 
     const audioEls = new Map<string, HTMLAudioElement>();
+    const audioTracks = new Map<string, RemoteAudioTrack>(); // identity -> track
     function attachTrack(track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) {
       if (track.kind !== Track.Kind.Audio) return;
       const el = track.attach() as HTMLAudioElement;
@@ -354,6 +396,10 @@ function Game() {
       el.style.display = "none";
       document.body.appendChild(el);
       audioEls.set(participant.identity + track.sid, el);
+      if (track instanceof RemoteAudioTrack) {
+        track.setVolume(0); // start muted; proximity loop will ramp
+        audioTracks.set(participant.identity, track);
+      }
     }
     function detachTrack(track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) {
       if (track.kind !== Track.Kind.Audio) return;
@@ -364,11 +410,31 @@ function Game() {
         el.remove();
         audioEls.delete(key);
       }
+      audioTracks.delete(participant.identity);
     }
     room.on(RoomEvent.TrackSubscribed, attachTrack);
     room.on(RoomEvent.TrackUnsubscribed, detachTrack);
     room.on(RoomEvent.ParticipantConnected, () => setVoiceCount(room.numParticipants));
     room.on(RoomEvent.ParticipantDisconnected, () => setVoiceCount(room.numParticipants));
+
+    // Proximity volume loop
+    let raf = 0;
+    const tick = () => {
+      const me = localPosRef.current;
+      for (const [pid, track] of audioTracks) {
+        const r = remotePlayersRef.current.get(pid);
+        let v = 0;
+        if (r) {
+          const d = Math.hypot(r.x - me.x, r.y - me.y, r.z - me.z);
+          if (d <= PROXIMITY_NEAR) v = 1;
+          else if (d >= PROXIMITY_MAX) v = 0;
+          else v = 1 - (d - PROXIMITY_NEAR) / (PROXIMITY_MAX - PROXIMITY_NEAR);
+        }
+        try { track.setVolume(v); } catch { /* noop */ }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
 
     (async () => {
       try {
@@ -402,8 +468,10 @@ function Game() {
 
     return () => {
       cancelled = true;
+      cancelAnimationFrame(raf);
       for (const el of audioEls.values()) el.remove();
       audioEls.clear();
+      audioTracks.clear();
       room.disconnect().catch(() => {});
       roomRef.current = null;
     };
@@ -427,7 +495,7 @@ function Game() {
     ch.send({
       type: "broadcast",
       event: "pose",
-      payload: { ...p, id: myIdRef.current, name: myNameRef.current },
+      payload: { ...p, id: myIdRef.current, name: myNameRef.current, rank: myRankRef.current },
     });
   }
 
@@ -490,9 +558,11 @@ function Game() {
     const cmd = (rawCmd ?? "").toLowerCase();
     if (cmd === "help") {
       localSystem(
-        isAdmin
-          ? "Admin: /heal <name|me>  /kill <name>  /kick <name>  /announce <msg>  /players"
-          : "/help  /players — admin commands available to authorized players only",
+        isOwner
+          ? "Owner: /tp <name>  /summon <name>  /freeze <name>  /unfreeze <name>  /god  /nuke  /speed <n>  /heal /kill /kick /announce /players"
+          : isAdmin
+            ? "Admin: /heal <name|me>  /kill <name>  /kick <name>  /announce <msg>  /players"
+            : "/help  /players — admin commands available to authorized players only",
       );
       return;
     }
@@ -522,6 +592,64 @@ function Game() {
       if (!targetId) { localSystem(`Player "${targetName}" not found.`); return; }
       send({ action: cmd, targetId });
       localSystem(`/${cmd} → ${targetName}`);
+      return;
+    }
+
+    // Owner-only commands beyond this point
+    if (!isOwner) {
+      localSystem(`Unknown command: /${cmd}`);
+      return;
+    }
+
+    if (cmd === "god") {
+      localOpsRef.current.god = !localOpsRef.current.god;
+      localSystem(`God mode: ${localOpsRef.current.god ? "ON" : "OFF"}`);
+      return;
+    }
+    if (cmd === "speed") {
+      const n = Number(rest[0]);
+      if (!Number.isFinite(n) || n <= 0 || n > 5) { localSystem("Usage: /speed <0.1-5>"); return; }
+      localOpsRef.current.speedMult = n;
+      localSystem(`Speed multiplier: ${n}x`);
+      return;
+    }
+    if (cmd === "tp") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId || targetId === myIdRef.current) { localSystem(`Player "${targetName}" not found.`); return; }
+      const r = remotePlayersRef.current.get(targetId);
+      if (!r) { localSystem("Target has no known position yet."); return; }
+      localOpsRef.current.teleport = { x: r.x, z: r.z };
+      localSystem(`Teleported to ${r.name}`);
+      return;
+    }
+    if (cmd === "summon") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId || targetId === myIdRef.current) { localSystem(`Player "${targetName}" not found.`); return; }
+      send({ action: "summon", targetId, x: localPosRef.current.x, z: localPosRef.current.z });
+      localSystem(`Summoned ${targetName}`);
+      return;
+    }
+    if (cmd === "freeze" || cmd === "unfreeze") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId) { localSystem(`Player "${targetName}" not found.`); return; }
+      if (targetId === myIdRef.current) {
+        localOpsRef.current.frozen = cmd === "freeze";
+        localSystem(cmd === "freeze" ? "You are frozen" : "You are unfrozen");
+        return;
+      }
+      send({ action: cmd, targetId });
+      localSystem(`/${cmd} → ${targetName}`);
+      return;
+    }
+    if (cmd === "nuke") {
+      // Kill everyone including self
+      for (const r of remotePlayersRef.current.values()) {
+        ch.send({ type: "broadcast", event: "hit", payload: { targetId: r.id, damage: 9999, shooterName: `☢ ${myNameRef.current}` } });
+      }
+      send({ action: "announce", msg: "☢ NUKE ☢" });
       return;
     }
     localSystem(`Unknown command: /${cmd}`);
@@ -675,6 +803,8 @@ function Game() {
         customArena={customArena}
         fov={fov}
         viewBobbing={viewBobbing}
+        localPosRef={localPosRef}
+        localOpsRef={localOpsRef}
       />
 
       {/* HUD */}
@@ -711,6 +841,17 @@ function Game() {
             <div className="mt-0.5 flex items-center justify-center gap-1 text-accent">
               <Users className="size-3" /> {playerCount}
             </div>
+            {myRank !== "player" && (
+              <div
+                className="mt-1 rounded px-1 text-[10px] font-bold tracking-widest"
+                style={{
+                  color: myRank === "owner" ? "#fbbf24" : "#f43f5e",
+                  textShadow: "0 0 6px currentColor",
+                }}
+              >
+                {myRank === "owner" ? "★ OWNER" : "◆ ADMIN"}
+              </div>
+            )}
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-right font-display text-xs uppercase tracking-widest backdrop-blur">
             <div className="text-primary">K {hud.kills}</div>
