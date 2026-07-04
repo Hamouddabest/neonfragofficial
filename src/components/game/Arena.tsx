@@ -198,6 +198,7 @@ function RemotePlayerView({
   const armR = useRef<THREE.Mesh>(null);
   const prev = useRef({ x: 0, z: 0, phase: 0 });
   const [name, setName] = useState<string>(() => remotePlayersRef.current.get(id)?.name ?? "Rival");
+  const [rank, setRank] = useState<Rank>(() => remotePlayersRef.current.get(id)?.rank ?? "player");
   const color = useMemo(() => {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
@@ -210,6 +211,8 @@ function RemotePlayerView({
     ref.current.rotation.y = r.yaw;
     ref.current.visible = r.alive;
     if (r.name && r.name !== name) setName(r.name);
+    const rk = r.rank ?? "player";
+    if (rk !== rank) setRank(rk);
     // walk animation
     const dx = r.x - prev.current.x;
     const dz = r.z - prev.current.z;
@@ -280,9 +283,25 @@ function RemotePlayerView({
         </mesh>
       </group>
       <Billboard position={[0, 2, 0]}>
+        {rank !== "player" && (
+          <Text
+            position={[0, 0.45, 0]}
+            fontSize={0.28}
+            color={rank === "owner" ? "#fbbf24" : "#f43f5e"}
+            outlineWidth={0.045}
+            outlineColor="#000000"
+            anchorX="center"
+            anchorY="middle"
+            renderOrder={999}
+            material-depthTest={false}
+            material-toneMapped={false}
+          >
+            {rank === "owner" ? "★ OWNER ★" : "◆ ADMIN"}
+          </Text>
+        )}
         <Text
           fontSize={0.35}
-          color="#22d3ee"
+          color={rank === "owner" ? "#fde68a" : rank === "admin" ? "#fecaca" : "#22d3ee"}
           outlineWidth={0.04}
           outlineColor="#000000"
           anchorX="center"
