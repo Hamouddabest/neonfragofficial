@@ -10,6 +10,16 @@ const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
 export type WeaponId = "rifle" | "sniper" | "rpg";
+export type Rank = "owner" | "admin" | "player";
+
+export type LocalOps = {
+  teleport: { x: number; z: number } | null;
+  frozen: boolean;
+  god: boolean;
+  speedMult: number;
+};
+
+export type LocalPos = { x: number; y: number; z: number };
 export type WeaponSpec = {
   id: WeaponId;
   name: string;
@@ -57,6 +67,7 @@ export type RemotePlayer = {
   z: number;
   yaw: number;
   alive: boolean;
+  rank?: Rank;
 };
 
 export type PlayerPose = {
@@ -66,6 +77,7 @@ export type PlayerPose = {
   yaw: number;
   pitch: number;
   alive: boolean;
+  rank?: Rank;
 };
 
 export type ShotEvent = {
@@ -116,6 +128,8 @@ export function ArenaScene({
   customArena,
   fov = 75,
   viewBobbing = true,
+  localPosRef,
+  localOpsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -131,6 +145,8 @@ export function ArenaScene({
   customArena?: CustomArena | null;
   fov?: number;
   viewBobbing?: boolean;
+  localPosRef?: React.MutableRefObject<LocalPos>;
+  localOpsRef?: React.MutableRefObject<LocalOps>;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -159,6 +175,8 @@ export function ArenaScene({
         blocks={customArena?.blocks}
         explosionsRef={explosionsRef}
         fov={fov}
+        localPosRef={localPosRef}
+        localOpsRef={localOpsRef}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
