@@ -558,9 +558,11 @@ function Game() {
     const cmd = (rawCmd ?? "").toLowerCase();
     if (cmd === "help") {
       localSystem(
-        isAdmin
-          ? "Admin: /heal <name|me>  /kill <name>  /kick <name>  /announce <msg>  /players"
-          : "/help  /players — admin commands available to authorized players only",
+        isOwner
+          ? "Owner: /tp <name>  /summon <name>  /freeze <name>  /unfreeze <name>  /god  /nuke  /speed <n>  /heal /kill /kick /announce /players"
+          : isAdmin
+            ? "Admin: /heal <name|me>  /kill <name>  /kick <name>  /announce <msg>  /players"
+            : "/help  /players — admin commands available to authorized players only",
       );
       return;
     }
@@ -590,6 +592,64 @@ function Game() {
       if (!targetId) { localSystem(`Player "${targetName}" not found.`); return; }
       send({ action: cmd, targetId });
       localSystem(`/${cmd} → ${targetName}`);
+      return;
+    }
+
+    // Owner-only commands beyond this point
+    if (!isOwner) {
+      localSystem(`Unknown command: /${cmd}`);
+      return;
+    }
+
+    if (cmd === "god") {
+      localOpsRef.current.god = !localOpsRef.current.god;
+      localSystem(`God mode: ${localOpsRef.current.god ? "ON" : "OFF"}`);
+      return;
+    }
+    if (cmd === "speed") {
+      const n = Number(rest[0]);
+      if (!Number.isFinite(n) || n <= 0 || n > 5) { localSystem("Usage: /speed <0.1-5>"); return; }
+      localOpsRef.current.speedMult = n;
+      localSystem(`Speed multiplier: ${n}x`);
+      return;
+    }
+    if (cmd === "tp") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId || targetId === myIdRef.current) { localSystem(`Player "${targetName}" not found.`); return; }
+      const r = remotePlayersRef.current.get(targetId);
+      if (!r) { localSystem("Target has no known position yet."); return; }
+      localOpsRef.current.teleport = { x: r.x, z: r.z };
+      localSystem(`Teleported to ${r.name}`);
+      return;
+    }
+    if (cmd === "summon") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId || targetId === myIdRef.current) { localSystem(`Player "${targetName}" not found.`); return; }
+      send({ action: "summon", targetId, x: localPosRef.current.x, z: localPosRef.current.z });
+      localSystem(`Summoned ${targetName}`);
+      return;
+    }
+    if (cmd === "freeze" || cmd === "unfreeze") {
+      const targetName = rest.join(" ");
+      const targetId = resolveTargetId(targetName);
+      if (!targetId) { localSystem(`Player "${targetName}" not found.`); return; }
+      if (targetId === myIdRef.current) {
+        localOpsRef.current.frozen = cmd === "freeze";
+        localSystem(cmd === "freeze" ? "You are frozen" : "You are unfrozen");
+        return;
+      }
+      send({ action: cmd, targetId });
+      localSystem(`/${cmd} → ${targetName}`);
+      return;
+    }
+    if (cmd === "nuke") {
+      // Kill everyone including self
+      for (const r of remotePlayersRef.current.values()) {
+        ch.send({ type: "broadcast", event: "hit", payload: { targetId: r.id, damage: 9999, shooterName: `☢ ${myNameRef.current}` } });
+      }
+      send({ action: "announce", msg: "☢ NUKE ☢" });
       return;
     }
     localSystem(`Unknown command: /${cmd}`);
