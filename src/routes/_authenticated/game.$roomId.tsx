@@ -803,6 +803,8 @@ function Game() {
         customArena={customArena}
         fov={fov}
         viewBobbing={viewBobbing}
+        localPosRef={localPosRef}
+        localOpsRef={localOpsRef}
       />
 
       {/* HUD */}
