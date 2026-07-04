@@ -841,6 +841,17 @@ function Game() {
             <div className="mt-0.5 flex items-center justify-center gap-1 text-accent">
               <Users className="size-3" /> {playerCount}
             </div>
+            {myRank !== "player" && (
+              <div
+                className="mt-1 rounded px-1 text-[10px] font-bold tracking-widest"
+                style={{
+                  color: myRank === "owner" ? "#fbbf24" : "#f43f5e",
+                  textShadow: "0 0 6px currentColor",
+                }}
+              >
+                {myRank === "owner" ? "★ OWNER" : "◆ ADMIN"}
+              </div>
+            )}
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-right font-display text-xs uppercase tracking-widest backdrop-blur">
             <div className="text-primary">K {hud.kills}</div>
