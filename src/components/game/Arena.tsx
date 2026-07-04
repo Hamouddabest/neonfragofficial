@@ -479,13 +479,25 @@ function Game({
 
     // movement relative to yaw
     const boost = now < player.current.speedBoostUntil ? 1.9 : 1;
-    const speed = 6 * boost;
+    const opsMult = localOpsRef?.current.speedMult ?? 1;
+    const frozen = localOpsRef?.current.frozen ?? false;
+    const speed = 6 * boost * opsMult;
+    if (frozen) { c.moveX = 0; c.moveY = 0; }
     const forward = new THREE.Vector3(-Math.sin(c.yaw), 0, -Math.cos(c.yaw));
     const right = new THREE.Vector3(Math.cos(c.yaw), 0, -Math.sin(c.yaw));
     const move = new THREE.Vector3()
       .addScaledVector(forward, c.moveY * speed * dt)
       .addScaledVector(right, c.moveX * speed * dt);
     player.current.pos.add(move);
+
+    // Owner teleport (consume once)
+    if (localOpsRef?.current.teleport) {
+      const tp = localOpsRef.current.teleport;
+      player.current.pos.set(tp.x, EYE + 0.5, tp.z);
+      player.current.vy = 0;
+      localOpsRef.current.teleport = null;
+    }
+
     player.current.pos.x = THREE.MathUtils.clamp(player.current.pos.x, -ARENA + 1, ARENA - 1);
     player.current.pos.z = THREE.MathUtils.clamp(player.current.pos.z, -ARENA + 1, ARENA - 1);
 
@@ -525,7 +537,10 @@ function Game({
 
     // Apply incoming damage / heal from network
     if (incomingHitRef.current !== 0 && player.current.hp > 0) {
-      player.current.hp -= incomingHitRef.current;
+      // God mode: ignore positive damage, still allow negative (heals)
+      const god = localOpsRef?.current.god ?? false;
+      const dmg = god && incomingHitRef.current > 0 ? 0 : incomingHitRef.current;
+      player.current.hp -= dmg;
       incomingHitRef.current = 0;
       if (player.current.hp > 100) player.current.hp = 100;
       if (player.current.hp <= 0) {
@@ -536,6 +551,13 @@ function Game({
         player.current.vy = 0;
         onLocalDeath("");
       }
+    }
+
+    // Publish local pos for proximity voice
+    if (localPosRef) {
+      localPosRef.current.x = player.current.pos.x;
+      localPosRef.current.y = player.current.pos.y;
+      localPosRef.current.z = player.current.pos.z;
     }
 
     // Reload trigger (per current weapon)
