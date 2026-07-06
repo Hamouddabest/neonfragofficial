@@ -5,9 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2 } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
+import { useIsOwner } from "@/hooks/use-is-owner";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/play")({
   head: () => ({ meta: [{ title: "Lobby — NEONFRAG" }] }),
@@ -21,10 +23,38 @@ function generateRoomCode() {
 function PlayLobby() {
   const navigate = useNavigate();
   const { identity } = useIdentity();
+  const { isOwner } = useIsOwner();
+  const { user } = useAuth();
   const isGuest = identity?.isGuest ?? false;
   const [roomCode, setRoomCode] = useState("");
   const [callsign, setCallsign] = useState("");
   const [customCode, setCustomCode] = useState("");
+  const [ffaPickerOpen, setFfaPickerOpen] = useState(false);
+
+  const { data: officialMaps } = useQuery({
+    queryKey: ["official-maps"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("custom_arenas")
+        .select("room_id, name")
+        .eq("is_official", true)
+        .eq("published", true)
+        .order("updated_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+
+  const { data: myMapCount } = useQuery({
+    queryKey: ["my-map-count", user?.id],
+    enabled: !!user && !isGuest,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("custom_arenas")
+        .select("*", { count: "exact", head: true })
+        .eq("owner_id", user!.id);
+      return count ?? 0;
+    },
+  });
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -79,14 +109,24 @@ function PlayLobby() {
     navigate({ to: "/build/$roomId", params: { roomId: code } });
   }
 
+  function buildOfficialMap() {
+    if (!isOwner) return;
+    const code = generateRoomCode();
+    navigate({ to: "/build/$roomId", params: { roomId: code } });
+  }
+
   function joinCustomArena() {
     const code = customCode.trim().toUpperCase();
     if (code.length < 4) return toast.error("Enter a valid arena ID");
     navigate({ to: "/game/$roomId", params: { roomId: code } });
   }
 
-  function quickFFA() {
-    navigate({ to: "/game/$roomId", params: { roomId: "FFA" } });
+  function openFFA() {
+    setFfaPickerOpen(true);
+  }
+  function pickFFAMap(roomId: string) {
+    setFfaPickerOpen(false);
+    navigate({ to: "/game/$roomId", params: { roomId } });
   }
 
   function joinRoom() {
@@ -178,14 +218,24 @@ function PlayLobby() {
               <h2 className="font-display text-lg font-bold uppercase tracking-wider">Free-for-All</h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Jump straight into a live arena. Every player for themselves — fight for the most frags.
+              Every player for themselves — pick a map and fight for the most frags.
             </p>
-            <Button
-              onClick={quickFFA}
-              className="mt-5 h-12 w-full bg-accent font-bold uppercase tracking-widest text-accent-foreground hover:bg-accent/90"
-            >
-              Drop into FFA
-            </Button>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <Button
+                onClick={openFFA}
+                className="h-12 w-full bg-accent font-bold uppercase tracking-widest text-accent-foreground hover:bg-accent/90"
+              >
+                Drop into FFA
+              </Button>
+              {isOwner && (
+                <Button
+                  onClick={buildOfficialMap}
+                  className="h-12 w-full bg-primary font-bold uppercase tracking-widest text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_var(--primary)]"
+                >
+                  <Star className="mr-2 size-4" /> Build official map
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card/70 p-6 backdrop-blur">
@@ -223,7 +273,64 @@ function PlayLobby() {
             <Button onClick={saveCallsign} variant="outline">Save</Button>
           </div>
         </div>
+
+        {!isGuest && (
+          <div className="mt-6">
+            <Button asChild variant="outline" className="w-full h-12">
+              <Link to="/my-maps">
+                <FolderOpen className="mr-2 size-4" />
+                My maps
+                <span className="ml-2 rounded-full bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary">
+                  {myMapCount ?? 0}
+                </span>
+              </Link>
+            </Button>
+          </div>
+        )}
       </div>
+
+      {ffaPickerOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur p-4" onClick={() => setFfaPickerOpen(false)}>
+          <div className="w-full max-w-lg rounded-xl border-2 border-accent/60 bg-card p-6 shadow-[0_0_40px_var(--accent)]" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="font-display text-xl font-black uppercase tracking-wider">Pick a map</h3>
+              <button onClick={() => setFfaPickerOpen(false)} className="text-muted-foreground hover:text-primary" aria-label="Close">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="grid gap-2">
+              <button
+                onClick={() => pickFFAMap("FFA")}
+                className="flex items-center justify-between rounded-lg border border-accent/60 bg-accent/10 p-4 text-left hover:bg-accent/20"
+              >
+                <div>
+                  <div className="font-display font-bold uppercase tracking-wider text-accent">Default arena</div>
+                  <div className="text-xs text-muted-foreground">The classic neon grid</div>
+                </div>
+                <Zap className="size-5 text-accent" />
+              </button>
+              {officialMaps?.map((m) => (
+                <button
+                  key={m.room_id}
+                  onClick={() => pickFFAMap(m.room_id)}
+                  className="flex items-center justify-between rounded-lg border border-primary/40 bg-primary/5 p-4 text-left hover:bg-primary/15"
+                >
+                  <div>
+                    <div className="font-display font-bold uppercase tracking-wider text-primary">{m.name || m.room_id}</div>
+                    <div className="text-xs text-muted-foreground">Official map · ID {m.room_id}</div>
+                  </div>
+                  <Star className="size-5 text-primary" />
+                </button>
+              ))}
+              {(!officialMaps || officialMaps.length === 0) && (
+                <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                  No official maps yet {isOwner ? "— build one!" : ""}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
