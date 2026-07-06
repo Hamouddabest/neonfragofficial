@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2 } from "lucide-react";
+import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2, Star, Play } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { ensureGuest } from "@/hooks/use-identity";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,6 +22,19 @@ export const Route = createFileRoute("/")({
 function Index() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const { data: officialMaps } = useQuery({
+    queryKey: ["official-maps"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("custom_arenas")
+        .select("room_id, name, blocks, spawn_points, updated_at")
+        .eq("is_official", true)
+        .eq("published", true)
+        .order("updated_at", { ascending: false })
+        .limit(12);
+      return data ?? [];
+    },
+  });
   function playAsGuest() {
     ensureGuest();
     navigate({ to: "/play" });
@@ -86,6 +101,50 @@ function Index() {
             </div>
           ))}
         </div>
+
+        {officialMaps && officialMaps.length > 0 && (
+          <section className="mt-24 w-full text-left">
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.3em] text-accent">
+                  <Star className="size-3" /> Official maps
+                </div>
+                <h2 className="mt-3 font-display text-3xl font-black uppercase tracking-tight md:text-4xl">
+                  Play the <span className="text-primary neon-text">official</span> maps
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">Built and published by the game owner.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {officialMaps.map((m) => {
+                const blockCount = Array.isArray(m.blocks) ? m.blocks.length : 0;
+                const spawnCount = Array.isArray(m.spawn_points) ? m.spawn_points.length : 0;
+                return (
+                  <Link
+                    key={m.room_id}
+                    to={user ? "/game/$roomId" : "/auth"}
+                    params={user ? { roomId: m.room_id } : undefined}
+                    className="group rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/10 to-accent/5 p-5 backdrop-blur transition hover:border-primary hover:shadow-[0_0_24px_var(--primary)]"
+                  >
+                    <div className="flex items-start justify-between">
+                      <Star className="size-5 text-accent" />
+                      <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">Official</span>
+                    </div>
+                    <h3 className="mt-3 truncate font-display text-xl font-black uppercase tracking-wider text-primary">
+                      {m.name || m.room_id}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {blockCount} blocks · {spawnCount} spawns
+                    </p>
+                    <div className="mt-4 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-accent">
+                      <Play className="size-3" /> Drop in
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </section>
     </main>
   );
