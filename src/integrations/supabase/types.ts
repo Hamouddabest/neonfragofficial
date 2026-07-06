@@ -19,7 +19,10 @@ export type Database = {
           blocks: Json
           confirmed: boolean
           created_at: string
+          is_official: boolean
+          name: string | null
           owner_id: string
+          published: boolean
           room_id: string
           spawn_points: Json
           updated_at: string
@@ -28,7 +31,10 @@ export type Database = {
           blocks?: Json
           confirmed?: boolean
           created_at?: string
+          is_official?: boolean
+          name?: string | null
           owner_id: string
+          published?: boolean
           room_id: string
           spawn_points?: Json
           updated_at?: string
@@ -37,7 +43,10 @@ export type Database = {
           blocks?: Json
           confirmed?: boolean
           created_at?: string
+          is_official?: boolean
+          name?: string | null
           owner_id?: string
+          published?: boolean
           room_id?: string
           spawn_points?: Json
           updated_at?: string
@@ -162,6 +171,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_game_owner: { Args: { uid: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
