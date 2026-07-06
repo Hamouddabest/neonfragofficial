@@ -45,9 +45,9 @@ function MyMaps() {
     qc.invalidateQueries({ queryKey: ["official-maps"] });
   }
 
-  function newMap(official = false) {
+  function newMap() {
     const code = generateRoomCode();
-    navigate({ to: "/build/$roomId", params: { roomId: code }, search: official ? { official: 1 } : undefined });
+    navigate({ to: "/build/$roomId", params: { roomId: code } });
   }
 
   const count = maps?.length ?? 0;
@@ -62,11 +62,11 @@ function MyMaps() {
           </Button>
           <div className="flex gap-2">
             {isOwner && (
-              <Button onClick={() => newMap(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 shadow-[0_0_16px_var(--accent)]">
+              <Button onClick={newMap} className="bg-accent text-accent-foreground hover:bg-accent/90 shadow-[0_0_16px_var(--accent)]">
                 <Star className="mr-2 size-4" /> New official map
               </Button>
             )}
-            <Button onClick={() => newMap(false)}>
+            <Button onClick={newMap}>
               <Plus className="mr-2 size-4" /> New map
             </Button>
           </div>
@@ -87,7 +87,7 @@ function MyMaps() {
           <div className="rounded-xl border border-dashed border-border p-10 text-center">
             <Hammer className="mx-auto mb-3 size-8 text-muted-foreground" />
             <p className="text-muted-foreground">No maps yet. Build your first arena.</p>
-            <Button onClick={() => newMap(false)} className="mt-5"><Plus className="mr-2 size-4" /> New map</Button>
+            <Button onClick={newMap} className="mt-5"><Plus className="mr-2 size-4" /> New map</Button>
           </div>
         )}
 

@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedPlayRouteImport } from './routes/_authenticated/play'
+import { Route as AuthenticatedMyMapsRouteImport } from './routes/_authenticated/my-maps'
 import { Route as AuthenticatedGameRoomIdRouteImport } from './routes/_authenticated/game.$roomId'
 import { Route as AuthenticatedBuildRoomIdRouteImport } from './routes/_authenticated/build.$roomId'
 
@@ -35,6 +36,11 @@ const AuthenticatedPlayRoute = AuthenticatedPlayRouteImport.update({
   path: '/play',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMyMapsRoute = AuthenticatedMyMapsRouteImport.update({
+  id: '/my-maps',
+  path: '/my-maps',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedGameRoomIdRoute = AuthenticatedGameRoomIdRouteImport.update({
   id: '/game/$roomId',
   path: '/game/$roomId',
@@ -50,6 +56,7 @@ const AuthenticatedBuildRoomIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/my-maps': typeof AuthenticatedMyMapsRoute
   '/play': typeof AuthenticatedPlayRoute
   '/build/$roomId': typeof AuthenticatedBuildRoomIdRoute
   '/game/$roomId': typeof AuthenticatedGameRoomIdRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/my-maps': typeof AuthenticatedMyMapsRoute
   '/play': typeof AuthenticatedPlayRoute
   '/build/$roomId': typeof AuthenticatedBuildRoomIdRoute
   '/game/$roomId': typeof AuthenticatedGameRoomIdRoute
@@ -66,20 +74,28 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/my-maps': typeof AuthenticatedMyMapsRoute
   '/_authenticated/play': typeof AuthenticatedPlayRoute
   '/_authenticated/build/$roomId': typeof AuthenticatedBuildRoomIdRoute
   '/_authenticated/game/$roomId': typeof AuthenticatedGameRoomIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/play' | '/build/$roomId' | '/game/$roomId'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/my-maps'
+    | '/play'
+    | '/build/$roomId'
+    | '/game/$roomId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/play' | '/build/$roomId' | '/game/$roomId'
+  to: '/' | '/auth' | '/my-maps' | '/play' | '/build/$roomId' | '/game/$roomId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/my-maps'
     | '/_authenticated/play'
     | '/_authenticated/build/$roomId'
     | '/_authenticated/game/$roomId'
@@ -121,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlayRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/my-maps': {
+      id: '/_authenticated/my-maps'
+      path: '/my-maps'
+      fullPath: '/my-maps'
+      preLoaderRoute: typeof AuthenticatedMyMapsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/game/$roomId': {
       id: '/_authenticated/game/$roomId'
       path: '/game/$roomId'
@@ -139,12 +162,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedMyMapsRoute: typeof AuthenticatedMyMapsRoute
   AuthenticatedPlayRoute: typeof AuthenticatedPlayRoute
   AuthenticatedBuildRoomIdRoute: typeof AuthenticatedBuildRoomIdRoute
   AuthenticatedGameRoomIdRoute: typeof AuthenticatedGameRoomIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedMyMapsRoute: AuthenticatedMyMapsRoute,
   AuthenticatedPlayRoute: AuthenticatedPlayRoute,
   AuthenticatedBuildRoomIdRoute: AuthenticatedBuildRoomIdRoute,
   AuthenticatedGameRoomIdRoute: AuthenticatedGameRoomIdRoute,
