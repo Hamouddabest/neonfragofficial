@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { useState } from "react";
-import { Box, Square, Circle, ArrowUpRight, MapPin, Trash2, Check, Copy, X, RotateCw, ArrowUp, Wind } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Box, Square, Circle, ArrowUpRight, MapPin, Trash2, Check, Copy, X, RotateCw, ArrowUp, Wind, Star, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsOwner } from "@/hooks/use-is-owner";
 import { toast } from "sonner";
 import { ArenaBlockMesh, blockBox, type ArenaBlock, type SpawnPoint } from "@/components/game/Arena";
 
@@ -25,11 +26,44 @@ function Builder() {
   const { roomId } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isOwner } = useIsOwner();
   const [tool, setTool] = useState<Tool>("cube");
   const [rot, setRot] = useState(0);
   const [blocks, setBlocks] = useState<ArenaBlock[]>([]);
   const [spawns, setSpawns] = useState<SpawnPoint[]>([]);
   const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [isOfficial, setIsOfficial] = useState(false);
+  const [published, setPublished] = useState(false);
+  const [loadedOwnerId, setLoadedOwnerId] = useState<string | null>(null);
+
+  // Load existing arena (edit mode) if it exists.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("custom_arenas")
+        .select("blocks, spawn_points, name, is_official, published, owner_id")
+        .eq("room_id", roomId)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      setBlocks((data.blocks as unknown as ArenaBlock[]) ?? []);
+      setSpawns((data.spawn_points as unknown as SpawnPoint[]) ?? []);
+      setName(data.name ?? "");
+      setIsOfficial(!!data.is_official);
+      setPublished(!!data.published);
+      setLoadedOwnerId(data.owner_id ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [roomId]);
+
+  // If someone who isn't the arena owner opens the URL, kick them out.
+  useEffect(() => {
+    if (loadedOwnerId && user && loadedOwnerId !== user.id) {
+      toast.error("You can't edit someone else's arena");
+      navigate({ to: "/play" });
+    }
+  }, [loadedOwnerId, user, navigate]);
 
   function place(x: number, z: number, y: number) {
     const sx = snap(x), sz = snap(z);
@@ -68,6 +102,7 @@ function Builder() {
       return;
     }
     if (spawns.length === 0) { toast.error("Place at least one spawn point"); return; }
+    if (isOfficial && !name.trim()) { toast.error("Official maps need a name"); return; }
     setSaving(true);
     const { error } = await supabase
       .from("custom_arenas")
@@ -77,11 +112,19 @@ function Builder() {
         blocks: JSON.parse(JSON.stringify(blocks)),
         spawn_points: JSON.parse(JSON.stringify(spawns)),
         confirmed: true,
+        name: name.trim() || null,
+        is_official: isOfficial && isOwner,
+        published: published && isOfficial && isOwner,
       });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Arena ready — dropping in");
-    navigate({ to: "/game/$roomId", params: { roomId } });
+    if (isOfficial && published) {
+      toast.success("Official map published to the home page");
+      navigate({ to: "/" });
+    } else {
+      toast.success("Arena saved — dropping in");
+      navigate({ to: "/game/$roomId", params: { roomId } });
+    }
   }
 
   function copyId() {
@@ -137,7 +180,7 @@ function Builder() {
       {/* Top bar */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
         <div className="pointer-events-auto flex items-center gap-2">
-          <Link to="/play" className="grid size-10 place-items-center rounded-md bg-black/70 text-primary backdrop-blur" aria-label="Leave">
+          <Link to="/my-maps" className="grid size-10 place-items-center rounded-md bg-black/70 text-primary backdrop-blur" aria-label="Leave">
             <X className="size-5" />
           </Link>
           <button onClick={copyId} className="flex items-center gap-2 rounded-md bg-black/70 px-3 py-2 backdrop-blur">
@@ -155,8 +198,29 @@ function Builder() {
         </button>
       </div>
 
-      <div className="pointer-events-none absolute left-3 top-16 max-w-[60%] rounded bg-black/60 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
-        Tap the ground to place · Drag to orbit · Place at least 1 spawn
+      {/* Map name + owner-only publishing controls */}
+      <div className="pointer-events-auto absolute left-3 right-3 top-16 mx-auto max-w-md space-y-1.5 rounded-md bg-black/75 p-2 backdrop-blur">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={30}
+          placeholder="Map name (optional)"
+          className="w-full rounded bg-black/60 px-2 py-1 text-xs text-primary placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-primary"
+        />
+        {isOwner && (
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-display uppercase tracking-widest">
+            <label className={`flex cursor-pointer items-center gap-1 rounded px-2 py-1 ${isOfficial ? "bg-accent/20 text-accent" : "bg-black/40 text-muted-foreground"}`}>
+              <input type="checkbox" className="hidden" checked={isOfficial} onChange={(e) => setIsOfficial(e.target.checked)} />
+              <Star className="size-3" /> Official
+            </label>
+            <label className={`flex items-center gap-1 rounded px-2 py-1 ${published ? "bg-primary/20 text-primary" : "bg-black/40 text-muted-foreground"} ${!isOfficial ? "opacity-50" : "cursor-pointer"}`}>
+              <input type="checkbox" className="hidden" disabled={!isOfficial} checked={published} onChange={(e) => setPublished(e.target.checked)} />
+              <Globe className="size-3" /> Publish to home
+            </label>
+            <span className="text-[9px] text-muted-foreground normal-case tracking-normal">Official maps show on the home page</span>
+          </div>
+        )}
+        <div className="text-[10px] text-muted-foreground">Tap the ground to place · Drag to orbit · Place ≥1 spawn</div>
       </div>
 
       {/* Toolbar */}
