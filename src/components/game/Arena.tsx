@@ -942,3 +942,42 @@ function ViewmodelGun({
     </group>
   );
 }
+
+function LocalPlayerAvatar({
+  localPosRef,
+  controls,
+}: {
+  localPosRef: React.MutableRefObject<LocalPos>;
+  controls: React.MutableRefObject<Controls>;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!ref.current) return;
+    ref.current.position.set(localPosRef.current.x, localPosRef.current.y - EYE, localPosRef.current.z);
+    ref.current.rotation.y = controls.current.yaw;
+  });
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 0.45, 0]} castShadow>
+        <boxGeometry args={[0.7, 0.9, 0.4]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.6} metalness={0.5} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 1.15, 0]} castShadow>
+        <boxGeometry args={[0.45, 0.45, 0.45]} />
+        <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.2} />
+      </mesh>
+      <mesh position={[0, 1.18, 0.23]}>
+        <boxGeometry args={[0.36, 0.14, 0.02]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={4} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.22, 0.15, 0]} castShadow>
+        <boxGeometry args={[0.22, 0.8, 0.22]} />
+        <meshStandardMaterial color="#1a1530" emissive="#22d3ee" emissiveIntensity={0.2} />
+      </mesh>
+      <mesh position={[-0.22, 0.15, 0]} castShadow>
+        <boxGeometry args={[0.22, 0.8, 0.22]} />
+        <meshStandardMaterial color="#1a1530" emissive="#22d3ee" emissiveIntensity={0.2} />
+      </mesh>
+    </group>
+  );
+}
