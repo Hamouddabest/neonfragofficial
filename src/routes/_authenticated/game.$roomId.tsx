@@ -1074,7 +1074,7 @@ function Game() {
       {platform === "pc" && document.pointerLockElement !== rootRef.current && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
-            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1/2/3 weapon
+            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1-5 weapon · V 3rd person
           </div>
         </div>
       )}
