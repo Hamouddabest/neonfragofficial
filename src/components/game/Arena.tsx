@@ -394,6 +394,8 @@ function Game({
   fov = 75,
   localPosRef,
   localOpsRef,
+  thirdPerson = false,
+  lookDeltaRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -412,6 +414,8 @@ function Game({
   fov?: number;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
+  thirdPerson?: boolean;
+  lookDeltaRef?: React.MutableRefObject<{ yaw: number; pitch: number; prevYaw: number; prevPitch: number }>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
