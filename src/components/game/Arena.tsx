@@ -839,16 +839,19 @@ function ViewmodelGun({
   controls,
   fireRef,
   viewBobbing = true,
+  lookDeltaRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   fireRef: React.MutableRefObject<number>;
   viewBobbing?: boolean;
+  lookDeltaRef?: React.MutableRefObject<{ yaw: number; pitch: number; prevYaw: number; prevPitch: number }>;
 }) {
   const { camera } = useThree();
   const group = useRef<THREE.Group>(null);
   const flash = useRef<THREE.Mesh>(null);
   const flashLight = useRef<THREE.PointLight>(null);
   const bobPhase = useRef(0);
+  const swayRef = useRef({ x: 0, y: 0 });
   useFrame((_, dt) => {
     const g = group.current;
     if (!g) return;
@@ -866,6 +869,19 @@ function ViewmodelGun({
     const bobX = Math.cos(bobPhase.current * 0.5) * 0.01 * moving;
     const upDown = new THREE.Vector3(bobX, bobY, 0).applyQuaternion(camera.quaternion);
     g.position.add(upDown);
+
+    // Look sway — the hand lags behind the camera when you swing the view.
+    if (viewBobbing && lookDeltaRef) {
+      const targetSwayX = THREE.MathUtils.clamp(-lookDeltaRef.current.yaw * 6, -0.15, 0.15);
+      const targetSwayY = THREE.MathUtils.clamp(-lookDeltaRef.current.pitch * 6, -0.15, 0.15);
+      // ease toward target
+      swayRef.current.x += (targetSwayX - swayRef.current.x) * Math.min(1, dt * 8);
+      swayRef.current.y += (targetSwayY - swayRef.current.y) * Math.min(1, dt * 8);
+      const sway = new THREE.Vector3(swayRef.current.x, swayRef.current.y, 0).applyQuaternion(camera.quaternion);
+      g.position.add(sway);
+      g.rotateY(swayRef.current.x * 0.8);
+      g.rotateX(-swayRef.current.y * 0.6);
+    }
 
     // Recoil kick — back and up briefly after firing
     const since = (performance.now() - fireRef.current) / 1000;
