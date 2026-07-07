@@ -924,8 +924,8 @@ function Game() {
 
       {/* Weapon selector */}
       <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex gap-1.5">
-        {(["rifle","sniper","rpg"] as WeaponId[]).map((w, i) => {
-          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : Rocket;
+        {(["rifle","sniper","rpg","smg","shotgun"] as WeaponId[]).map((w, i) => {
+          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : w === "rpg" ? Rocket : w === "smg" ? Sparkles : Flame;
           const active = weapon === w;
           return (
             <button
