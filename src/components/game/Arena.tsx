@@ -445,11 +445,6 @@ function Game({
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
-    if (thirdPerson) {
-      const cp = Math.cos(c.pitch);
-      const back = new THREE.Vector3(Math.sin(c.yaw) * cp, -Math.sin(c.pitch) + 0.4, Math.cos(c.yaw) * cp);
-      camera.position.addScaledVector(back, 3.2);
-    }
   }, [camera]);
 
   // Precompute solid block AABBs each frame (custom arena is stable via reference)
