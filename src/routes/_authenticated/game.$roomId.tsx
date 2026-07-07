@@ -753,6 +753,9 @@ function Game() {
       if (k === "1") selectWeapon("rifle");
       if (k === "2") selectWeapon("sniper");
       if (k === "3") selectWeapon("rpg");
+      if (k === "4") selectWeapon("smg");
+      if (k === "5") selectWeapon("shotgun");
+      if (k === "v") setThirdPerson((v) => !v);
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
