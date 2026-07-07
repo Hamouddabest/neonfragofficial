@@ -1114,8 +1114,38 @@ function Game() {
               <span className={`absolute top-0.5 size-5 rounded-full transition-all ${viewBobbing ? "left-[22px] bg-accent shadow-[0_0_10px_var(--accent)]" : "left-0.5 bg-muted-foreground"}`} />
             </button>
           </label>
+          <label className="mt-3 flex items-center justify-between text-xs font-display uppercase tracking-widest text-accent">
+            <span className="flex items-center gap-1"><User className="size-3.5" /> 3rd person (V)</span>
+            <button
+              type="button"
+              onClick={() => setThirdPerson((v) => !v)}
+              className={`relative h-6 w-11 rounded-full border transition-colors ${thirdPerson ? "border-accent bg-accent/40" : "border-border bg-black/60"}`}
+              aria-pressed={thirdPerson}
+            >
+              <span className={`absolute top-0.5 size-5 rounded-full transition-all ${thirdPerson ? "left-[22px] bg-accent shadow-[0_0_10px_var(--accent)]" : "left-0.5 bg-muted-foreground"}`} />
+            </button>
+          </label>
+          <div className="mt-4">
+            <div className="text-xs font-display uppercase tracking-widest text-accent">Graphics</div>
+            <div className="mt-2 grid grid-cols-3 gap-1">
+              {(["low","medium","high"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGraphics(g)}
+                  className={`rounded border px-2 py-1.5 text-[10px] font-display uppercase tracking-widest transition-colors ${
+                    graphics === g
+                      ? "border-primary bg-primary/25 text-primary shadow-[0_0_10px_var(--primary)]"
+                      : "border-border bg-black/60 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
-            Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC.
+            Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC. Weapons: <span className="text-primary">1</span>–<span className="text-primary">5</span>.
           </p>
         </div>
       )}
