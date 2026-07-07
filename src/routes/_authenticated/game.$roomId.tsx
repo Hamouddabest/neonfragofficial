@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, WEAPONS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, User, X, Zap, Sparkles, Flame } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -68,9 +68,20 @@ function Game() {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("neonfrag.bobbing") !== "0";
   });
+  const [thirdPerson, setThirdPerson] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("neonfrag.3p") === "1";
+  });
+  const [graphics, setGraphics] = useState<"low" | "medium" | "high">(() => {
+    if (typeof window === "undefined") return "medium";
+    const v = window.localStorage.getItem("neonfrag.gfx");
+    return v === "low" || v === "high" ? v : "medium";
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => { try { window.localStorage.setItem("neonfrag.fov", String(fov)); } catch { /* noop */ } }, [fov]);
   useEffect(() => { try { window.localStorage.setItem("neonfrag.bobbing", viewBobbing ? "1" : "0"); } catch { /* noop */ } }, [viewBobbing]);
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.3p", thirdPerson ? "1" : "0"); } catch { /* noop */ } }, [thirdPerson]);
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.gfx", graphics); } catch { /* noop */ } }, [graphics]);
 
   function setZoom(on: boolean) { controls.current.zoom = on; }
 
@@ -805,6 +816,8 @@ function Game() {
         viewBobbing={viewBobbing}
         localPosRef={localPosRef}
         localOpsRef={localOpsRef}
+        thirdPerson={thirdPerson}
+        graphics={graphics}
       />
 
       {/* HUD */}
