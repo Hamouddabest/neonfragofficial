@@ -506,6 +506,12 @@ function Game({
     // camera rotation
     const euler = new THREE.Euler(c.pitch, c.yaw, 0, "YXZ");
     camera.quaternion.setFromEuler(euler);
+    if (lookDeltaRef) {
+      lookDeltaRef.current.yaw = c.yaw - lookDeltaRef.current.prevYaw;
+      lookDeltaRef.current.pitch = c.pitch - lookDeltaRef.current.prevPitch;
+      lookDeltaRef.current.prevYaw = c.yaw;
+      lookDeltaRef.current.prevPitch = c.pitch;
+    }
     // FOV zoom for sniper
     const persp = camera as THREE.PerspectiveCamera;
     const base = fov;
