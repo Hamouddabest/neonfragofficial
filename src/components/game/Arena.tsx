@@ -579,6 +579,11 @@ function Game({
     }
 
     camera.position.copy(player.current.pos);
+    if (thirdPerson) {
+      const cp = Math.cos(c.pitch);
+      const back = new THREE.Vector3(Math.sin(c.yaw) * cp, -Math.sin(c.pitch) + 0.4, Math.cos(c.yaw) * cp);
+      camera.position.addScaledVector(back, 3.2);
+    }
 
     // Apply incoming damage / heal from network
     if (incomingHitRef.current !== 0 && player.current.hp > 0) {
