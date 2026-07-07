@@ -9,7 +9,7 @@ const PLAYER_RADIUS = 0.4;
 const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
-export type WeaponId = "rifle" | "sniper" | "rpg";
+export type WeaponId = "rifle" | "sniper" | "rpg" | "smg" | "shotgun";
 export type Rank = "owner" | "admin" | "player";
 
 export type LocalOps = {
@@ -35,6 +35,8 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   rifle:  { id: "rifle",  name: "Rifle",  cooldownMs: 180, magazine: 30, reloadMs: 1500, damage: 34, splashRadius: 0, maxRange: 80, color: "#22d3ee" },
   sniper: { id: "sniper", name: "Sniper", cooldownMs: 900, magazine: 5,  reloadMs: 2200, damage: 95, splashRadius: 0, maxRange: 200, color: "#a78bfa" },
   rpg:    { id: "rpg",    name: "RPG",    cooldownMs: 1200,magazine: 3,  reloadMs: 2800, damage: 75, splashRadius: 4.5, maxRange: 60, color: "#f97316" },
+  smg:    { id: "smg",    name: "SMG",    cooldownMs: 80,  magazine: 45, reloadMs: 1600, damage: 16, splashRadius: 0, maxRange: 55, color: "#4ade80" },
+  shotgun:{ id: "shotgun",name: "Shotgun",cooldownMs: 650, magazine: 6,  reloadMs: 2100, damage: 95, splashRadius: 0, maxRange: 18, color: "#fb7185" },
 };
 
 export type GameState = {
@@ -130,6 +132,8 @@ export function ArenaScene({
   viewBobbing = true,
   localPosRef,
   localOpsRef,
+  thirdPerson = false,
+  graphics = "medium",
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -147,14 +151,19 @@ export function ArenaScene({
   viewBobbing?: boolean;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
+  thirdPerson?: boolean;
+  graphics?: "low" | "medium" | "high";
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
+  const lookDeltaRef = useRef({ yaw: 0, pitch: 0, prevYaw: 0, prevPitch: 0 });
+  const dpr: [number, number] = graphics === "low" ? [0.6, 1] : graphics === "high" ? [1, 2] : [1, 1.5];
+  const shadows = graphics !== "low";
   return (
-    <Canvas shadows camera={{ fov, near: 0.05, far: 300 }}>
+    <Canvas shadows={shadows} dpr={dpr} camera={{ fov, near: 0.05, far: 300 }}>
       <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
-      <ambientLight intensity={0.45} />
-      <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
+      <ambientLight intensity={graphics === "high" ? 0.55 : 0.45} />
+      <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow={shadows} />
       {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} />
@@ -177,8 +186,15 @@ export function ArenaScene({
         fov={fov}
         localPosRef={localPosRef}
         localOpsRef={localOpsRef}
+        thirdPerson={thirdPerson}
+        lookDeltaRef={lookDeltaRef}
       />
-      <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
+      {!thirdPerson && (
+        <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} lookDeltaRef={lookDeltaRef} />
+      )}
+      {thirdPerson && localPosRef && (
+        <LocalPlayerAvatar localPosRef={localPosRef} controls={controls} />
+      )}
       <Explosions explosionsRef={explosionsRef} />
     </Canvas>
   );
