@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, WEAPONS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, User, X, Zap, Sparkles, Flame } from "lucide-react";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -68,20 +68,9 @@ function Game() {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("neonfrag.bobbing") !== "0";
   });
-  const [thirdPerson, setThirdPerson] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("neonfrag.3p") === "1";
-  });
-  const [graphics, setGraphics] = useState<"low" | "medium" | "high">(() => {
-    if (typeof window === "undefined") return "medium";
-    const v = window.localStorage.getItem("neonfrag.gfx");
-    return v === "low" || v === "high" ? v : "medium";
-  });
   const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => { try { window.localStorage.setItem("neonfrag.fov", String(fov)); } catch { /* noop */ } }, [fov]);
   useEffect(() => { try { window.localStorage.setItem("neonfrag.bobbing", viewBobbing ? "1" : "0"); } catch { /* noop */ } }, [viewBobbing]);
-  useEffect(() => { try { window.localStorage.setItem("neonfrag.3p", thirdPerson ? "1" : "0"); } catch { /* noop */ } }, [thirdPerson]);
-  useEffect(() => { try { window.localStorage.setItem("neonfrag.gfx", graphics); } catch { /* noop */ } }, [graphics]);
 
   function setZoom(on: boolean) { controls.current.zoom = on; }
 
@@ -753,9 +742,6 @@ function Game() {
       if (k === "1") selectWeapon("rifle");
       if (k === "2") selectWeapon("sniper");
       if (k === "3") selectWeapon("rpg");
-      if (k === "4") selectWeapon("smg");
-      if (k === "5") selectWeapon("shotgun");
-      if (k === "v") setThirdPerson((v) => !v);
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -819,8 +805,6 @@ function Game() {
         viewBobbing={viewBobbing}
         localPosRef={localPosRef}
         localOpsRef={localOpsRef}
-        thirdPerson={thirdPerson}
-        graphics={graphics}
       />
 
       {/* HUD */}
@@ -924,8 +908,8 @@ function Game() {
 
       {/* Weapon selector */}
       <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex gap-1.5">
-        {(["rifle","sniper","rpg","smg","shotgun"] as WeaponId[]).map((w, i) => {
-          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : w === "rpg" ? Rocket : w === "smg" ? Sparkles : Flame;
+        {(["rifle","sniper","rpg"] as WeaponId[]).map((w, i) => {
+          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : Rocket;
           const active = weapon === w;
           return (
             <button
@@ -1074,7 +1058,7 @@ function Game() {
       {platform === "pc" && document.pointerLockElement !== rootRef.current && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
-            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1-5 weapon · V 3rd person
+            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1/2/3 weapon
           </div>
         </div>
       )}
@@ -1114,38 +1098,8 @@ function Game() {
               <span className={`absolute top-0.5 size-5 rounded-full transition-all ${viewBobbing ? "left-[22px] bg-accent shadow-[0_0_10px_var(--accent)]" : "left-0.5 bg-muted-foreground"}`} />
             </button>
           </label>
-          <label className="mt-3 flex items-center justify-between text-xs font-display uppercase tracking-widest text-accent">
-            <span className="flex items-center gap-1"><User className="size-3.5" /> 3rd person (V)</span>
-            <button
-              type="button"
-              onClick={() => setThirdPerson((v) => !v)}
-              className={`relative h-6 w-11 rounded-full border transition-colors ${thirdPerson ? "border-accent bg-accent/40" : "border-border bg-black/60"}`}
-              aria-pressed={thirdPerson}
-            >
-              <span className={`absolute top-0.5 size-5 rounded-full transition-all ${thirdPerson ? "left-[22px] bg-accent shadow-[0_0_10px_var(--accent)]" : "left-0.5 bg-muted-foreground"}`} />
-            </button>
-          </label>
-          <div className="mt-4">
-            <div className="text-xs font-display uppercase tracking-widest text-accent">Graphics</div>
-            <div className="mt-2 grid grid-cols-3 gap-1">
-              {(["low","medium","high"] as const).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGraphics(g)}
-                  className={`rounded border px-2 py-1.5 text-[10px] font-display uppercase tracking-widest transition-colors ${
-                    graphics === g
-                      ? "border-primary bg-primary/25 text-primary shadow-[0_0_10px_var(--primary)]"
-                      : "border-border bg-black/60 text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
           <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
-            Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC. Weapons: <span className="text-primary">1</span>–<span className="text-primary">5</span>.
+            Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC.
           </p>
         </div>
       )}

@@ -9,7 +9,7 @@ const PLAYER_RADIUS = 0.4;
 const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
-export type WeaponId = "rifle" | "sniper" | "rpg" | "smg" | "shotgun";
+export type WeaponId = "rifle" | "sniper" | "rpg";
 export type Rank = "owner" | "admin" | "player";
 
 export type LocalOps = {
@@ -35,8 +35,6 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   rifle:  { id: "rifle",  name: "Rifle",  cooldownMs: 180, magazine: 30, reloadMs: 1500, damage: 34, splashRadius: 0, maxRange: 80, color: "#22d3ee" },
   sniper: { id: "sniper", name: "Sniper", cooldownMs: 900, magazine: 5,  reloadMs: 2200, damage: 95, splashRadius: 0, maxRange: 200, color: "#a78bfa" },
   rpg:    { id: "rpg",    name: "RPG",    cooldownMs: 1200,magazine: 3,  reloadMs: 2800, damage: 75, splashRadius: 4.5, maxRange: 60, color: "#f97316" },
-  smg:    { id: "smg",    name: "SMG",    cooldownMs: 80,  magazine: 45, reloadMs: 1600, damage: 16, splashRadius: 0, maxRange: 55, color: "#4ade80" },
-  shotgun:{ id: "shotgun",name: "Shotgun",cooldownMs: 650, magazine: 6,  reloadMs: 2100, damage: 95, splashRadius: 0, maxRange: 18, color: "#fb7185" },
 };
 
 export type GameState = {
@@ -132,8 +130,6 @@ export function ArenaScene({
   viewBobbing = true,
   localPosRef,
   localOpsRef,
-  thirdPerson = false,
-  graphics = "medium",
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -151,19 +147,14 @@ export function ArenaScene({
   viewBobbing?: boolean;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
-  thirdPerson?: boolean;
-  graphics?: "low" | "medium" | "high";
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
-  const lookDeltaRef = useRef({ yaw: 0, pitch: 0, prevYaw: 0, prevPitch: 0 });
-  const dpr: [number, number] = graphics === "low" ? [0.6, 1] : graphics === "high" ? [1, 2] : [1, 1.5];
-  const shadows = graphics !== "low";
   return (
-    <Canvas shadows={shadows} dpr={dpr} camera={{ fov, near: 0.05, far: 300 }}>
+    <Canvas shadows camera={{ fov, near: 0.05, far: 300 }}>
       <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
-      <ambientLight intensity={graphics === "high" ? 0.55 : 0.45} />
-      <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow={shadows} />
+      <ambientLight intensity={0.45} />
+      <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
       {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} />
@@ -186,15 +177,8 @@ export function ArenaScene({
         fov={fov}
         localPosRef={localPosRef}
         localOpsRef={localOpsRef}
-        thirdPerson={thirdPerson}
-        lookDeltaRef={lookDeltaRef}
       />
-      {!thirdPerson && (
-        <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} lookDeltaRef={lookDeltaRef} />
-      )}
-      {thirdPerson && localPosRef && (
-        <LocalPlayerAvatar localPosRef={localPosRef} controls={controls} />
-      )}
+      <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
     </Canvas>
   );
@@ -394,8 +378,6 @@ function Game({
   fov = 75,
   localPosRef,
   localOpsRef,
-  thirdPerson = false,
-  lookDeltaRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -414,8 +396,6 @@ function Game({
   fov?: number;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
-  thirdPerson?: boolean;
-  lookDeltaRef?: React.MutableRefObject<{ yaw: number; pitch: number; prevYaw: number; prevPitch: number }>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -506,12 +486,6 @@ function Game({
     // camera rotation
     const euler = new THREE.Euler(c.pitch, c.yaw, 0, "YXZ");
     camera.quaternion.setFromEuler(euler);
-    if (lookDeltaRef) {
-      lookDeltaRef.current.yaw = c.yaw - lookDeltaRef.current.prevYaw;
-      lookDeltaRef.current.pitch = c.pitch - lookDeltaRef.current.prevPitch;
-      lookDeltaRef.current.prevYaw = c.yaw;
-      lookDeltaRef.current.prevPitch = c.pitch;
-    }
     // FOV zoom for sniper
     const persp = camera as THREE.PerspectiveCamera;
     const base = fov;
@@ -579,11 +553,6 @@ function Game({
     }
 
     camera.position.copy(player.current.pos);
-    if (thirdPerson) {
-      const cp = Math.cos(c.pitch);
-      const back = new THREE.Vector3(Math.sin(c.yaw) * cp, -Math.sin(c.pitch) + 0.4, Math.cos(c.yaw) * cp);
-      camera.position.addScaledVector(back, 3.2);
-    }
 
     // Apply incoming damage / heal from network
     if (incomingHitRef.current !== 0 && player.current.hp > 0) {
@@ -850,19 +819,16 @@ function ViewmodelGun({
   controls,
   fireRef,
   viewBobbing = true,
-  lookDeltaRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   fireRef: React.MutableRefObject<number>;
   viewBobbing?: boolean;
-  lookDeltaRef?: React.MutableRefObject<{ yaw: number; pitch: number; prevYaw: number; prevPitch: number }>;
 }) {
   const { camera } = useThree();
   const group = useRef<THREE.Group>(null);
   const flash = useRef<THREE.Mesh>(null);
   const flashLight = useRef<THREE.PointLight>(null);
   const bobPhase = useRef(0);
-  const swayRef = useRef({ x: 0, y: 0 });
   useFrame((_, dt) => {
     const g = group.current;
     if (!g) return;
@@ -880,19 +846,6 @@ function ViewmodelGun({
     const bobX = Math.cos(bobPhase.current * 0.5) * 0.01 * moving;
     const upDown = new THREE.Vector3(bobX, bobY, 0).applyQuaternion(camera.quaternion);
     g.position.add(upDown);
-
-    // Look sway — the hand lags behind the camera when you swing the view.
-    if (viewBobbing && lookDeltaRef) {
-      const targetSwayX = THREE.MathUtils.clamp(-lookDeltaRef.current.yaw * 6, -0.15, 0.15);
-      const targetSwayY = THREE.MathUtils.clamp(-lookDeltaRef.current.pitch * 6, -0.15, 0.15);
-      // ease toward target
-      swayRef.current.x += (targetSwayX - swayRef.current.x) * Math.min(1, dt * 8);
-      swayRef.current.y += (targetSwayY - swayRef.current.y) * Math.min(1, dt * 8);
-      const sway = new THREE.Vector3(swayRef.current.x, swayRef.current.y, 0).applyQuaternion(camera.quaternion);
-      g.position.add(sway);
-      g.rotateY(swayRef.current.x * 0.8);
-      g.rotateX(-swayRef.current.y * 0.6);
-    }
 
     // Recoil kick — back and up briefly after firing
     const since = (performance.now() - fireRef.current) / 1000;
@@ -939,45 +892,6 @@ function ViewmodelGun({
         <meshBasicMaterial color="#fef08a" transparent opacity={0} toneMapped={false} />
       </mesh>
       <pointLight ref={flashLight} position={[0, 0.02, -0.6]} color="#fbbf24" intensity={0} distance={6} />
-    </group>
-  );
-}
-
-function LocalPlayerAvatar({
-  localPosRef,
-  controls,
-}: {
-  localPosRef: React.MutableRefObject<LocalPos>;
-  controls: React.MutableRefObject<Controls>;
-}) {
-  const ref = useRef<THREE.Group>(null);
-  useFrame(() => {
-    if (!ref.current) return;
-    ref.current.position.set(localPosRef.current.x, localPosRef.current.y - EYE, localPosRef.current.z);
-    ref.current.rotation.y = controls.current.yaw;
-  });
-  return (
-    <group ref={ref}>
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <boxGeometry args={[0.7, 0.9, 0.4]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.6} metalness={0.5} roughness={0.3} />
-      </mesh>
-      <mesh position={[0, 1.15, 0]} castShadow>
-        <boxGeometry args={[0.45, 0.45, 0.45]} />
-        <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.2} />
-      </mesh>
-      <mesh position={[0, 1.18, 0.23]}>
-        <boxGeometry args={[0.36, 0.14, 0.02]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={4} toneMapped={false} />
-      </mesh>
-      <mesh position={[0.22, 0.15, 0]} castShadow>
-        <boxGeometry args={[0.22, 0.8, 0.22]} />
-        <meshStandardMaterial color="#1a1530" emissive="#22d3ee" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh position={[-0.22, 0.15, 0]} castShadow>
-        <boxGeometry args={[0.22, 0.8, 0.22]} />
-        <meshStandardMaterial color="#1a1530" emissive="#22d3ee" emissiveIntensity={0.2} />
-      </mesh>
     </group>
   );
 }
