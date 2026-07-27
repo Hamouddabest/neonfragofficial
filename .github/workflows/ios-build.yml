@@ -31,8 +31,9 @@ jobs:
           npm install @capacitor/cli @capacitor/ios --save-dev --legacy-peer-deps
           mkdir -p dist && cp -r build/* dist/ 2>/dev/null || cp -r dist/* dist/ 2>/dev/null || touch dist/index.html
           npx cap add ios
-          echo "platform :ios, '15.0'" > ios/App/Podfile.tmp && cat ios/App/Podfile >> ios/App/Podfile.tmp && mv ios/App/Podfile.tmp ios/App/Podfile
+          echo -e "\npost_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end\nend" >> ios/App/Podfile
           npx cap sync ios
+
 
 
 
