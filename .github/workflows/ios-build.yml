@@ -26,12 +26,14 @@ jobs:
         run: |
           npm install vite --save-dev --legacy-peer-deps
           npm run build --if-present
-
       - name: Sync Capacitor iOS
         run: |
           npm install @capacitor/cli @capacitor/ios --save-dev --legacy-peer-deps
+          mkdir -p dist
           npx cap add ios
           npx cap sync ios
+
+
 
 
 
