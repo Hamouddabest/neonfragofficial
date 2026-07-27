@@ -27,7 +27,7 @@ jobs:
       - name: Build Web Assests
         run: |
           npm install -g vite
-          npm run build --if present
+          npm run build --if-present
 
       - name: Sync Capacitor iOS
         run: |
