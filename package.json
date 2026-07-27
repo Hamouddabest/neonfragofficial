@@ -92,9 +92,10 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.0.16"
+        "@capacitor/core": "^8.0.16"
   }
 }
-"@capacitor/core": "^6.0.0",
-"@capacitor/cli": "^6.0.0",
-"@capacitor/ios": "^6.0.0"
+
+  
+
+
