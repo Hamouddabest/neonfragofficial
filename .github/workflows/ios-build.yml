@@ -24,9 +24,10 @@ jobs:
       - name: Install Dependencies
         run: npm install --include=dev --legacy-peer-deps
 
-      - name: Build Web Assets
+      - name: Build Web Assests
         run: |
-          npm run build --if-present
+          npm install -g vite
+          npm run build --if present
 
       - name: Sync Capacitor iOS
         run: |
