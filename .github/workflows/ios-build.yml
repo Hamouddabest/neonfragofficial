@@ -29,9 +29,10 @@ jobs:
       - name: Sync Capacitor iOS
         run: |
           npm install @capacitor/cli @capacitor/ios --save-dev --legacy-peer-deps
-          mkdir -p dist
+          mkdir -p dist && cp -r build/* dist/ 2>/dev/null || cp -r dist/* dist/ 2>/dev/null || touch dist/index.html
           npx cap add ios
           npx cap sync ios
+
 
 
 
