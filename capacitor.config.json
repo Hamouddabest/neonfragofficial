@@ -1,0 +1,6 @@
+{
+  "appId": "com.yourname.lovableapp",
+  "appName": "NeonFrag",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
