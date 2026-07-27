@@ -30,7 +30,11 @@ jobs:
       - name: Sync Capacitor iOS
         run: |
           npm install @capacitor/cli --save-dev --legacy-peer-deps
+          npx cap add ios
           npx cap sync ios
+
+
+
 
       - name: Build Xcode Workspace
         run: |
