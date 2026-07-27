@@ -31,7 +31,7 @@ jobs:
           npm install @capacitor/cli @capacitor/ios --save-dev --legacy-peer-deps
           mkdir -p dist && cp -r build/* dist/ 2>/dev/null || cp -r dist/* dist/ 2>/dev/null || touch dist/index.html
           npx cap add ios
-          sed -i '' "s/platform :ios, '13.0'/platform :ios, '15.0'/g" ios/App/Podfile 2>/dev/null || sed -i "s/platform :ios, '13.0'/platform :ios, '15.0'/g" ios/App/Podfile 2>/dev/null
+          echo "platform :ios, '15.0'" > ios/App/Podfile.tmp && cat ios/App/Podfile >> ios/App/Podfile.tmp && mv ios/App/Podfile.tmp ios/App/Podfile
           npx cap sync ios
 
 
