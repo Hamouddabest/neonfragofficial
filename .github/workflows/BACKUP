@@ -1,0 +1,51 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch: # Allows you to manually click "Run workflow"
+
+jobs:
+  build:
+    runs-on: macos-14 # Uses GitHub's free macOS virtual machine
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-size: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Web Assets
+        run: npm run build
+
+      - name: Sync Capacitor iOS
+        run: |
+          npx cap json
+          npx cap sync ios
+
+      - name: Build Xcode Workspace
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace \
+                     -scheme App \
+                     -configuration Debug \
+                     -sdk iphoneos \
+                     CODE_SIGNING_ALLOWED=NO \
+                     ARCHS=arm64 \
+                     clean build
+                     
+      - name: Create Unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          mv ios/App/build/Debug-iphoneos/App.app build/Payload/
+          cd build && zip -r App.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-ipa
+          path: build/App.ipa
