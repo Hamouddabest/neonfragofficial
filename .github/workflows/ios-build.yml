@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build iOS App
 
 on:
   workflow_dispatch:
@@ -7,60 +7,67 @@ on:
       - main
 
 jobs:
-  build:
-    runs-on: macos-14
-    
+  build-ios:
+    runs-on: macos-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: npm
 
       - name: Install Dependencies
-        run: npm install --include=dev --legacy-peer-deps
+        run: npm install
 
-      - name: Build Web Assets
+      - name: Build Web App
+        run: npm run build
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2
+
+      - name: Install CocoaPods
         run: |
-          npm install vite --save-dev --legacy-peer-deps
-          npm run build --if-present
-      - name: Sync Capacitor iOS
+          sudo gem install cocoapods
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Install Pods
         run: |
-          npm install @capacitor/cli @capacitor/ios --save-dev --legacy-peer-deps
-          mkdir -p dist && cp -r build/* dist/ 2>/dev/null || cp -r dist/* dist/ 2>/dev/null || touch dist/index.html
-          npx cap add ios
-          echo -e "\npost_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end\nend" >> ios/App/Podfile
-          npx cap sync ios
+          cd ios/App
+          pod install
 
-
-
-
-
-
-
-
-
-      - name: Build Xcode Workspace
+      - name: Build iOS
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace \
-                     -scheme App \
-                     -configuration Debug \
-                     -sdk iphoneos \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     ARCHS=arm64 \
-                     clean build
-                     
-      - name: Create Unsigned IPA
-        run: |
-          mkdir -p build/Payload
-          mv ios/App/build/Debug-iphoneos/App.app build/Payload/
-          cd build && zip -r App.ipa Payload
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
 
-      - name: Upload IPA Artifact
+      - name: Archive Build
+        run: |
+          mkdir output
+          find ios -name "*.app" -exec cp -R {} output/ \;
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-app-ipa
-          path: build/App.ipa
+          name: NeonFrag-iOS
+          path: output
