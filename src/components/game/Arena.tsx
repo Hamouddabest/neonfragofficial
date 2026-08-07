@@ -458,6 +458,8 @@ function Game({
   fov = 75,
   localPosRef,
   localOpsRef,
+  ctfRef,
+  onFlagEvent,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -476,9 +478,16 @@ function Game({
   fov?: number;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
+  ctfRef?: React.MutableRefObject<CTFState | null>;
+  onFlagEvent?: (e: FlagEvent) => void;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
+    const ctf = ctfRef?.current;
+    if (ctf) {
+      const b = CTF_BASES[ctf.myTeam];
+      return new THREE.Vector3(b.x + (Math.random() * 6 - 3), EYE, b.z + (ctf.myTeam === "red" ? 3 : -3));
+    }
     if (spawnPoints && spawnPoints.length > 0) {
       const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
       return new THREE.Vector3(sp.x, EYE, sp.z);
@@ -492,7 +501,7 @@ function Game({
     hp: 100,
     kills: 0,
     deaths: 0,
-    ammo: { rifle: 30, sniper: 5, rpg: 3 } as Record<WeaponId, number>,
+    ammo: { rifle: 30, sniper: 5, rpg: 3, pistol: 12 } as Record<WeaponId, number>,
     speedBoostUntil: 0,
     lastPad: 0,
   });
