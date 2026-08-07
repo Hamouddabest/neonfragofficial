@@ -656,6 +656,18 @@ function Game({
       if (player.current.hp <= 0) {
         player.current.hp = 100;
         player.current.deaths += 1;
+        // Drop any carried flag where we died
+        const ctfd = ctfRef?.current;
+        if (ctfd) {
+          const enemy: Team = ctfd.myTeam === "red" ? "blue" : "red";
+          if (ctfd[enemy].carrierId === ctfd.myId) {
+            ctfd[enemy].carrierId = null;
+            ctfd[enemy].home = false;
+            ctfd[enemy].x = player.current.pos.x;
+            ctfd[enemy].z = player.current.pos.z;
+            onFlagEvent?.({ type: "drop", team: enemy, byId: ctfd.myId, x: ctfd[enemy].x, z: ctfd[enemy].z });
+          }
+        }
         const sp = pickSpawn();
         player.current.pos.set(sp.x, sp.y, sp.z);
         player.current.vy = 0;
@@ -668,6 +680,47 @@ function Game({
       localPosRef.current.x = player.current.pos.x;
       localPosRef.current.y = player.current.pos.y;
       localPosRef.current.z = player.current.pos.z;
+    }
+
+    // ===== Capture the Flag logic =====
+    const ctf = ctfRef?.current;
+    if (ctf && player.current.hp > 0) {
+      const me: Team = ctf.myTeam;
+      const enemy: Team = me === "red" ? "blue" : "red";
+      const px = player.current.pos.x;
+      const pz = player.current.pos.z;
+      const enemyFlag = ctf[enemy];
+      const myFlag = ctf[me];
+      const carrying = enemyFlag.carrierId === ctf.myId;
+
+      if (carrying) {
+        enemyFlag.x = px;
+        enemyFlag.z = pz;
+        const base = CTF_BASES[me];
+        if (myFlag.home && Math.hypot(px - base.x, pz - base.z) < 2.6) {
+          enemyFlag.carrierId = null;
+          enemyFlag.home = true;
+          enemyFlag.x = CTF_BASES[enemy].x;
+          enemyFlag.z = CTF_BASES[enemy].z;
+          if (me === "red") ctf.scoreRed += 1; else ctf.scoreBlue += 1;
+          onKillFeed("You captured the enemy flag!");
+          onFlagEvent?.({ type: "capture", team: me, byId: ctf.myId });
+        }
+      } else if (!enemyFlag.carrierId && Math.hypot(px - enemyFlag.x, pz - enemyFlag.z) < 1.8) {
+        enemyFlag.carrierId = ctf.myId;
+        enemyFlag.home = false;
+        onKillFeed("You picked up the enemy flag!");
+        onFlagEvent?.({ type: "pickup", team: enemy, byId: ctf.myId });
+      }
+
+      // Return our own dropped flag by touching it
+      if (!myFlag.home && !myFlag.carrierId && Math.hypot(px - myFlag.x, pz - myFlag.z) < 1.8) {
+        myFlag.home = true;
+        myFlag.x = CTF_BASES[me].x;
+        myFlag.z = CTF_BASES[me].z;
+        onKillFeed("You returned your flag");
+        onFlagEvent?.({ type: "return", team: me, byId: ctf.myId });
+      }
     }
 
     // Reload trigger (per current weapon)
@@ -703,6 +756,7 @@ function Game({
       let best: { id: string; dist: number; point: THREE.Vector3 } | null = null;
       for (const r of remotePlayersRef.current.values()) {
         if (!r.alive) continue;
+        if (ctf && r.team && r.team === ctf.myTeam) continue; // no friendly fire
         const sphere = new THREE.Sphere(new THREE.Vector3(r.x, r.y + 0.2, r.z), 0.75);
         const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
         if (hit) {
@@ -719,6 +773,7 @@ function Game({
         explosionsRef.current.push({ ...impact, t: now });
         for (const r of remotePlayersRef.current.values()) {
           if (!r.alive) continue;
+          if (ctf && r.team && r.team === ctf.myTeam) continue;
           const d = new THREE.Vector3(r.x, r.y, r.z).distanceTo(impactPoint);
           if (d <= spec.splashRadius) {
             const dmg = Math.round(spec.damage * (1 - d / spec.splashRadius));
@@ -756,6 +811,8 @@ function Game({
         yaw: c.yaw,
         pitch: c.pitch,
         alive: player.current.hp > 0,
+        team: ctf?.myTeam,
+        carrying: ctf ? (ctf[ctf.myTeam === "red" ? "blue" : "red"].carrierId === ctf.myId ? (ctf.myTeam === "red" ? "blue" : "red") : null) : null,
       });
     }
 
