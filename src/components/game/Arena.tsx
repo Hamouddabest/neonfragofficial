@@ -9,8 +9,47 @@ const PLAYER_RADIUS = 0.4;
 const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
-export type WeaponId = "rifle" | "sniper" | "rpg";
+export type WeaponId = "rifle" | "sniper" | "rpg" | "pistol";
 export type Rank = "owner" | "admin" | "player";
+export type Team = "red" | "blue";
+
+export type FlagState = {
+  home: boolean;
+  carrierId: string | null;
+  x: number;
+  z: number;
+};
+
+export type CTFState = {
+  myTeam: Team;
+  red: FlagState;
+  blue: FlagState;
+  scoreRed: number;
+  scoreBlue: number;
+};
+
+export const CTF_BASES: Record<Team, { x: number; z: number }> = {
+  red: { x: 0, z: -22 },
+  blue: { x: 0, z: 22 },
+};
+export const TEAM_COLORS: Record<Team, string> = { red: "#f43f5e", blue: "#38bdf8" };
+export const CTF_SCORE_LIMIT = 3;
+
+export function makeCTFState(myTeam: Team): CTFState {
+  return {
+    myTeam,
+    red: { home: true, carrierId: null, x: CTF_BASES.red.x, z: CTF_BASES.red.z },
+    blue: { home: true, carrierId: null, x: CTF_BASES.blue.x, z: CTF_BASES.blue.z },
+    scoreRed: 0,
+    scoreBlue: 0,
+  };
+}
+
+export type FlagEvent =
+  | { type: "pickup"; team: Team; byId: string }
+  | { type: "drop"; team: Team; byId: string; x: number; z: number }
+  | { type: "return"; team: Team; byId: string }
+  | { type: "capture"; team: Team; byId: string };
 
 export type LocalOps = {
   teleport: { x: number; z: number } | null;
@@ -32,6 +71,7 @@ export type WeaponSpec = {
   color: string;
 };
 export const WEAPONS: Record<WeaponId, WeaponSpec> = {
+  pistol: { id: "pistol", name: "Pistol", cooldownMs: 260, magazine: 12, reloadMs: 1200, damage: 45, splashRadius: 0, maxRange: 60, color: "#facc15" },
   rifle:  { id: "rifle",  name: "Rifle",  cooldownMs: 180, magazine: 30, reloadMs: 1500, damage: 34, splashRadius: 0, maxRange: 80, color: "#22d3ee" },
   sniper: { id: "sniper", name: "Sniper", cooldownMs: 900, magazine: 5,  reloadMs: 2200, damage: 95, splashRadius: 0, maxRange: 200, color: "#a78bfa" },
   rpg:    { id: "rpg",    name: "RPG",    cooldownMs: 1200,magazine: 3,  reloadMs: 2800, damage: 75, splashRadius: 4.5, maxRange: 60, color: "#f97316" },
