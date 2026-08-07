@@ -22,6 +22,7 @@ export type FlagState = {
 
 export type CTFState = {
   myTeam: Team;
+  myId: string;
   red: FlagState;
   blue: FlagState;
   scoreRed: number;
@@ -35,9 +36,10 @@ export const CTF_BASES: Record<Team, { x: number; z: number }> = {
 export const TEAM_COLORS: Record<Team, string> = { red: "#f43f5e", blue: "#38bdf8" };
 export const CTF_SCORE_LIMIT = 3;
 
-export function makeCTFState(myTeam: Team): CTFState {
+export function makeCTFState(myTeam: Team, myId: string): CTFState {
   return {
     myTeam,
+    myId,
     red: { home: true, carrierId: null, x: CTF_BASES.red.x, z: CTF_BASES.red.z },
     blue: { home: true, carrierId: null, x: CTF_BASES.blue.x, z: CTF_BASES.blue.z },
     scoreRed: 0,
