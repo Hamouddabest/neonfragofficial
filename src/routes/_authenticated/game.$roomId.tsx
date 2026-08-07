@@ -893,6 +893,8 @@ function Game() {
         localPosRef={localPosRef}
         speakingIdsRef={speakingIdsRef}
         localOpsRef={localOpsRef}
+        ctfRef={isCTF ? ctfRef : undefined}
+        onFlagEvent={isCTF ? handleFlagEvent : undefined}
       />
 
       {/* HUD */}
@@ -948,6 +950,26 @@ function Game() {
         </div>
 
         <div className="absolute top-16 right-3 space-y-1">
+          {isCTF && ctfHud && (
+            <div className="mb-2 rounded-md bg-black/70 px-3 py-2 text-center font-display text-xs uppercase tracking-widest backdrop-blur">
+              <div className="flex items-center justify-center gap-3">
+                <span style={{ color: TEAM_COLORS.red, textShadow: "0 0 8px currentColor" }}>RED {ctfHud.scoreRed}</span>
+                <span className="text-muted-foreground">/</span>
+                <span style={{ color: TEAM_COLORS.blue, textShadow: "0 0 8px currentColor" }}>BLU {ctfHud.scoreBlue}</span>
+              </div>
+              <div className="mt-1 text-[10px]" style={{ color: TEAM_COLORS[ctfHud.team] }}>
+                You are {ctfHud.team.toUpperCase()} · first to {CTF_SCORE_LIMIT}
+              </div>
+              {ctfHud.carrying && (
+                <div className="mt-1 animate-pulse text-[10px] font-bold text-yellow-300">
+                  🚩 Flag taken — run it to your base!
+                </div>
+              )}
+              {ctfHud.enemyHasOurs && (
+                <div className="mt-1 text-[10px] font-bold text-red-300">Your flag is stolen!</div>
+              )}
+            </div>
+          )}
           {feed.map((f) => (
             <div key={f.id} className="rounded bg-black/60 px-2 py-1 text-xs text-foreground backdrop-blur">
               {f.msg}
