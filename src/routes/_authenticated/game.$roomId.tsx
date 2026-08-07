@@ -66,14 +66,15 @@ function Game() {
   const ctfRef = useRef<CTFState | null>(null);
   const [ctfHud, setCtfHud] = useState<{ team: Team; scoreRed: number; scoreBlue: number; carrying: boolean; enemyHasOurs: boolean } | null>(null);
   const [ctfWinner, setCtfWinner] = useState<Team | null>(null);
+  const myIdentityId = identity?.id;
   useEffect(() => {
-    if (!isCTF || !identity) { ctfRef.current = null; return; }
+    if (!isCTF || !myIdentityId) { ctfRef.current = null; return; }
     let h = 0;
-    for (let i = 0; i < identity.id.length; i++) h = (h * 31 + identity.id.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < myIdentityId.length; i++) h = (h * 31 + myIdentityId.charCodeAt(i)) >>> 0;
     const team: Team = h % 2 === 0 ? "red" : "blue";
-    ctfRef.current = makeCTFState(team, identity.id);
+    ctfRef.current = makeCTFState(team, myIdentityId);
     setCtfHud({ team, scoreRed: 0, scoreBlue: 0, carrying: false, enemyHasOurs: false });
-  }, [isCTF, identity]);
+  }, [isCTF, myIdentityId]);
   useEffect(() => {
     if (!isCTF) return;
     const t = window.setInterval(() => {
