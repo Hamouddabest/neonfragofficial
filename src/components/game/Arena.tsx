@@ -130,6 +130,7 @@ export function ArenaScene({
   viewBobbing = true,
   localPosRef,
   localOpsRef,
+  speakingIdsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -147,6 +148,7 @@ export function ArenaScene({
   viewBobbing?: boolean;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
+  speakingIdsRef?: React.MutableRefObject<Set<string>>;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -157,7 +159,7 @@ export function ArenaScene({
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
       {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
       {remoteIds.map((id) => (
-        <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} />
+        <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} speakingIdsRef={speakingIdsRef} />
       ))}
       <Game
         controls={controls}
@@ -187,11 +189,14 @@ export function ArenaScene({
 function RemotePlayerView({
   id,
   remotePlayersRef,
+  speakingIdsRef,
 }: {
   id: string;
   remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+  speakingIdsRef?: React.MutableRefObject<Set<string>>;
 }) {
   const ref = useRef<THREE.Group>(null);
+  const micRef = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Mesh>(null);
   const legR = useRef<THREE.Mesh>(null);
   const armL = useRef<THREE.Mesh>(null);
@@ -199,6 +204,7 @@ function RemotePlayerView({
   const prev = useRef({ x: 0, z: 0, phase: 0 });
   const [name, setName] = useState<string>(() => remotePlayersRef.current.get(id)?.name ?? "Rival");
   const [rank, setRank] = useState<Rank>(() => remotePlayersRef.current.get(id)?.rank ?? "player");
+  const [speaking, setSpeaking] = useState(false);
   const color = useMemo(() => {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
@@ -225,6 +231,13 @@ function RemotePlayerView({
     if (legR.current) legR.current.rotation.x = -swing;
     if (armL.current) armL.current.rotation.x = -swing * 0.6;
     if (armR.current) armR.current.rotation.x = swing * 0.6;
+    // voice activity
+    const isSpeaking = speakingIdsRef?.current.has(id) ?? false;
+    if (isSpeaking !== speaking) setSpeaking(isSpeaking);
+    if (micRef.current && isSpeaking) {
+      const s = 1 + Math.sin(prev.current.phase * 4) * 0.12;
+      micRef.current.scale.setScalar(s);
+    }
   });
   return (
     <group ref={ref}>
