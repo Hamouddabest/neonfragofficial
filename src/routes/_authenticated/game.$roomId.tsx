@@ -57,6 +57,7 @@ function Game() {
   // Refs plumbed into ArenaScene
   const localPosRef = useRef<LocalPos>({ x: 0, y: 1.6, z: 8 });
   const localOpsRef = useRef<LocalOps>({ teleport: null, frozen: false, god: false, speedMult: 1 });
+  const speakingIdsRef = useRef<Set<string>>(new Set());
 
   // Player settings (persisted in localStorage)
   const [fov, setFov] = useState<number>(() => {
@@ -416,6 +417,10 @@ function Game() {
     room.on(RoomEvent.TrackUnsubscribed, detachTrack);
     room.on(RoomEvent.ParticipantConnected, () => setVoiceCount(room.numParticipants));
     room.on(RoomEvent.ParticipantDisconnected, () => setVoiceCount(room.numParticipants));
+    const onSpeakers = (speakers: { identity: string }[]) => {
+      speakingIdsRef.current = new Set(speakers.map((s) => s.identity));
+    };
+    room.on(RoomEvent.ActiveSpeakersChanged, onSpeakers);
 
     // Proximity volume loop
     let raf = 0;
@@ -804,6 +809,7 @@ function Game() {
         fov={fov}
         viewBobbing={viewBobbing}
         localPosRef={localPosRef}
+        speakingIdsRef={speakingIdsRef}
         localOpsRef={localOpsRef}
       />
 
