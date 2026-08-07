@@ -9,8 +9,49 @@ const PLAYER_RADIUS = 0.4;
 const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
-export type WeaponId = "rifle" | "sniper" | "rpg";
+export type WeaponId = "rifle" | "sniper" | "rpg" | "pistol";
 export type Rank = "owner" | "admin" | "player";
+export type Team = "red" | "blue";
+
+export type FlagState = {
+  home: boolean;
+  carrierId: string | null;
+  x: number;
+  z: number;
+};
+
+export type CTFState = {
+  myTeam: Team;
+  myId: string;
+  red: FlagState;
+  blue: FlagState;
+  scoreRed: number;
+  scoreBlue: number;
+};
+
+export const CTF_BASES: Record<Team, { x: number; z: number }> = {
+  red: { x: 0, z: -22 },
+  blue: { x: 0, z: 22 },
+};
+export const TEAM_COLORS: Record<Team, string> = { red: "#f43f5e", blue: "#38bdf8" };
+export const CTF_SCORE_LIMIT = 3;
+
+export function makeCTFState(myTeam: Team, myId: string): CTFState {
+  return {
+    myTeam,
+    myId,
+    red: { home: true, carrierId: null, x: CTF_BASES.red.x, z: CTF_BASES.red.z },
+    blue: { home: true, carrierId: null, x: CTF_BASES.blue.x, z: CTF_BASES.blue.z },
+    scoreRed: 0,
+    scoreBlue: 0,
+  };
+}
+
+export type FlagEvent =
+  | { type: "pickup"; team: Team; byId: string }
+  | { type: "drop"; team: Team; byId: string; x: number; z: number }
+  | { type: "return"; team: Team; byId: string }
+  | { type: "capture"; team: Team; byId: string };
 
 export type LocalOps = {
   teleport: { x: number; z: number } | null;
@@ -32,6 +73,7 @@ export type WeaponSpec = {
   color: string;
 };
 export const WEAPONS: Record<WeaponId, WeaponSpec> = {
+  pistol: { id: "pistol", name: "Pistol", cooldownMs: 260, magazine: 12, reloadMs: 1200, damage: 45, splashRadius: 0, maxRange: 60, color: "#facc15" },
   rifle:  { id: "rifle",  name: "Rifle",  cooldownMs: 180, magazine: 30, reloadMs: 1500, damage: 34, splashRadius: 0, maxRange: 80, color: "#22d3ee" },
   sniper: { id: "sniper", name: "Sniper", cooldownMs: 900, magazine: 5,  reloadMs: 2200, damage: 95, splashRadius: 0, maxRange: 200, color: "#a78bfa" },
   rpg:    { id: "rpg",    name: "RPG",    cooldownMs: 1200,magazine: 3,  reloadMs: 2800, damage: 75, splashRadius: 4.5, maxRange: 60, color: "#f97316" },
@@ -68,6 +110,8 @@ export type RemotePlayer = {
   yaw: number;
   alive: boolean;
   rank?: Rank;
+  team?: Team;
+  carrying?: Team | null;
 };
 
 export type PlayerPose = {
@@ -78,6 +122,8 @@ export type PlayerPose = {
   pitch: number;
   alive: boolean;
   rank?: Rank;
+  team?: Team;
+  carrying?: Team | null;
 };
 
 export type ShotEvent = {
@@ -131,6 +177,8 @@ export function ArenaScene({
   localPosRef,
   localOpsRef,
   speakingIdsRef,
+  ctfRef,
+  onFlagEvent,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -149,6 +197,8 @@ export function ArenaScene({
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
   speakingIdsRef?: React.MutableRefObject<Set<string>>;
+  ctfRef?: React.MutableRefObject<CTFState | null>;
+  onFlagEvent?: (e: FlagEvent) => void;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -158,6 +208,7 @@ export function ArenaScene({
       <ambientLight intensity={0.45} />
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
       {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
+      {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} speakingIdsRef={speakingIdsRef} />
       ))}
@@ -179,6 +230,8 @@ export function ArenaScene({
         fov={fov}
         localPosRef={localPosRef}
         localOpsRef={localOpsRef}
+        ctfRef={ctfRef}
+        onFlagEvent={onFlagEvent}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
@@ -205,11 +258,13 @@ function RemotePlayerView({
   const [name, setName] = useState<string>(() => remotePlayersRef.current.get(id)?.name ?? "Rival");
   const [rank, setRank] = useState<Rank>(() => remotePlayersRef.current.get(id)?.rank ?? "player");
   const [speaking, setSpeaking] = useState(false);
-  const color = useMemo(() => {
+  const [team, setTeam] = useState<Team | null>(() => remotePlayersRef.current.get(id)?.team ?? null);
+  const baseColor = useMemo(() => {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
     return `hsl(${h}, 90%, 60%)`;
   }, [id]);
+  const color = team ? TEAM_COLORS[team] : baseColor;
   useFrame((_, dt) => {
     const r = remotePlayersRef.current.get(id);
     if (!r || !ref.current) return;
@@ -219,6 +274,8 @@ function RemotePlayerView({
     if (r.name && r.name !== name) setName(r.name);
     const rk = r.rank ?? "player";
     if (rk !== rank) setRank(rk);
+    const tm = r.team ?? null;
+    if (tm !== team) setTeam(tm);
     // walk animation
     const dx = r.x - prev.current.x;
     const dz = r.z - prev.current.z;
@@ -407,6 +464,8 @@ function Game({
   fov = 75,
   localPosRef,
   localOpsRef,
+  ctfRef,
+  onFlagEvent,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -425,9 +484,16 @@ function Game({
   fov?: number;
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
+  ctfRef?: React.MutableRefObject<CTFState | null>;
+  onFlagEvent?: (e: FlagEvent) => void;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
+    const ctf = ctfRef?.current;
+    if (ctf) {
+      const b = CTF_BASES[ctf.myTeam];
+      return new THREE.Vector3(b.x + (Math.random() * 6 - 3), EYE, b.z + (ctf.myTeam === "red" ? 3 : -3));
+    }
     if (spawnPoints && spawnPoints.length > 0) {
       const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
       return new THREE.Vector3(sp.x, EYE, sp.z);
@@ -441,7 +507,7 @@ function Game({
     hp: 100,
     kills: 0,
     deaths: 0,
-    ammo: { rifle: 30, sniper: 5, rpg: 3 } as Record<WeaponId, number>,
+    ammo: { rifle: 30, sniper: 5, rpg: 3, pistol: 12 } as Record<WeaponId, number>,
     speedBoostUntil: 0,
     lastPad: 0,
   });
@@ -594,6 +660,18 @@ function Game({
       if (player.current.hp <= 0) {
         player.current.hp = 100;
         player.current.deaths += 1;
+        // Drop any carried flag where we died
+        const ctfd = ctfRef?.current;
+        if (ctfd) {
+          const enemy: Team = ctfd.myTeam === "red" ? "blue" : "red";
+          if (ctfd[enemy].carrierId === ctfd.myId) {
+            ctfd[enemy].carrierId = null;
+            ctfd[enemy].home = false;
+            ctfd[enemy].x = player.current.pos.x;
+            ctfd[enemy].z = player.current.pos.z;
+            onFlagEvent?.({ type: "drop", team: enemy, byId: ctfd.myId, x: ctfd[enemy].x, z: ctfd[enemy].z });
+          }
+        }
         const sp = pickSpawn();
         player.current.pos.set(sp.x, sp.y, sp.z);
         player.current.vy = 0;
@@ -606,6 +684,47 @@ function Game({
       localPosRef.current.x = player.current.pos.x;
       localPosRef.current.y = player.current.pos.y;
       localPosRef.current.z = player.current.pos.z;
+    }
+
+    // ===== Capture the Flag logic =====
+    const ctf = ctfRef?.current;
+    if (ctf && player.current.hp > 0) {
+      const me: Team = ctf.myTeam;
+      const enemy: Team = me === "red" ? "blue" : "red";
+      const px = player.current.pos.x;
+      const pz = player.current.pos.z;
+      const enemyFlag = ctf[enemy];
+      const myFlag = ctf[me];
+      const carrying = enemyFlag.carrierId === ctf.myId;
+
+      if (carrying) {
+        enemyFlag.x = px;
+        enemyFlag.z = pz;
+        const base = CTF_BASES[me];
+        if (myFlag.home && Math.hypot(px - base.x, pz - base.z) < 2.6) {
+          enemyFlag.carrierId = null;
+          enemyFlag.home = true;
+          enemyFlag.x = CTF_BASES[enemy].x;
+          enemyFlag.z = CTF_BASES[enemy].z;
+          if (me === "red") ctf.scoreRed += 1; else ctf.scoreBlue += 1;
+          onKillFeed("You captured the enemy flag!");
+          onFlagEvent?.({ type: "capture", team: me, byId: ctf.myId });
+        }
+      } else if (!enemyFlag.carrierId && Math.hypot(px - enemyFlag.x, pz - enemyFlag.z) < 1.8) {
+        enemyFlag.carrierId = ctf.myId;
+        enemyFlag.home = false;
+        onKillFeed("You picked up the enemy flag!");
+        onFlagEvent?.({ type: "pickup", team: enemy, byId: ctf.myId });
+      }
+
+      // Return our own dropped flag by touching it
+      if (!myFlag.home && !myFlag.carrierId && Math.hypot(px - myFlag.x, pz - myFlag.z) < 1.8) {
+        myFlag.home = true;
+        myFlag.x = CTF_BASES[me].x;
+        myFlag.z = CTF_BASES[me].z;
+        onKillFeed("You returned your flag");
+        onFlagEvent?.({ type: "return", team: me, byId: ctf.myId });
+      }
     }
 
     // Reload trigger (per current weapon)
@@ -641,6 +760,7 @@ function Game({
       let best: { id: string; dist: number; point: THREE.Vector3 } | null = null;
       for (const r of remotePlayersRef.current.values()) {
         if (!r.alive) continue;
+        if (ctf && r.team && r.team === ctf.myTeam) continue; // no friendly fire
         const sphere = new THREE.Sphere(new THREE.Vector3(r.x, r.y + 0.2, r.z), 0.75);
         const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
         if (hit) {
@@ -657,6 +777,7 @@ function Game({
         explosionsRef.current.push({ ...impact, t: now });
         for (const r of remotePlayersRef.current.values()) {
           if (!r.alive) continue;
+          if (ctf && r.team && r.team === ctf.myTeam) continue;
           const d = new THREE.Vector3(r.x, r.y, r.z).distanceTo(impactPoint);
           if (d <= spec.splashRadius) {
             const dmg = Math.round(spec.damage * (1 - d / spec.splashRadius));
@@ -694,6 +815,8 @@ function Game({
         yaw: c.yaw,
         pitch: c.pitch,
         alive: player.current.hp > 0,
+        team: ctf?.myTeam,
+        carrying: ctf ? (ctf[ctf.myTeam === "red" ? "blue" : "red"].carrierId === ctf.myId ? (ctf.myTeam === "red" ? "blue" : "red") : null) : null,
       });
     }
 
@@ -709,6 +832,85 @@ function Game({
   });
 
   return <group ref={remoteGroup} />;
+}
+
+function CTFWorld({
+  ctfRef,
+  remotePlayersRef,
+}: {
+  ctfRef: React.MutableRefObject<CTFState | null>;
+  remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+}) {
+  return (
+    <group>
+      {(["red", "blue"] as Team[]).map((t) => (
+        <group key={t} position={[CTF_BASES[t].x, 0.02, CTF_BASES[t].z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[2.2, 2.7, 48]} />
+            <meshBasicMaterial color={TEAM_COLORS[t]} toneMapped={false} transparent opacity={0.9} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+            <circleGeometry args={[2.2, 48]} />
+            <meshBasicMaterial color={TEAM_COLORS[t]} toneMapped={false} transparent opacity={0.15} />
+          </mesh>
+          <pointLight color={TEAM_COLORS[t]} intensity={12} distance={14} position={[0, 2, 0]} />
+        </group>
+      ))}
+      <FlagMesh team="red" ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />
+      <FlagMesh team="blue" ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />
+    </group>
+  );
+}
+
+function FlagMesh({
+  team,
+  ctfRef,
+  remotePlayersRef,
+}: {
+  team: Team;
+  ctfRef: React.MutableRefObject<CTFState | null>;
+  remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const cloth = useRef<THREE.Mesh>(null);
+  const t = useRef(0);
+  useFrame((_, dt) => {
+    const ctf = ctfRef.current;
+    const g = ref.current;
+    if (!ctf || !g) return;
+    const f = ctf[team];
+    t.current += dt;
+    let x = f.x;
+    let z = f.z;
+    let y = 0;
+    let visible = true;
+    if (f.carrierId) {
+      if (f.carrierId === ctf.myId) {
+        visible = false; // carried by us — shown in HUD
+      } else {
+        const r = remotePlayersRef.current.get(f.carrierId);
+        if (r) { x = r.x; z = r.z; y = r.y + 1.2; }
+      }
+    }
+    g.visible = visible;
+    g.position.set(x, y, z);
+    g.rotation.y = t.current * 1.2;
+    if (cloth.current) cloth.current.rotation.z = Math.sin(t.current * 3) * 0.08;
+  });
+  const color = TEAM_COLORS[team];
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 1.1, 0]}>
+        <cylinderGeometry args={[0.06, 0.06, 2.2, 8]} />
+        <meshStandardMaterial color="#e5e7eb" emissive="#94a3b8" emissiveIntensity={0.3} />
+      </mesh>
+      <mesh ref={cloth} position={[0.55, 1.75, 0]}>
+        <planeGeometry args={[1.1, 0.7]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
+      <pointLight color={color} intensity={6} distance={9} position={[0, 1.6, 0]} />
+    </group>
+  );
 }
 
 function CustomArenaWorld({ blocks, spawnPoints }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[] }) {
