@@ -175,6 +175,8 @@ export function ArenaScene({
   localPosRef,
   localOpsRef,
   speakingIdsRef,
+  ctfRef,
+  onFlagEvent,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -193,6 +195,8 @@ export function ArenaScene({
   localPosRef?: React.MutableRefObject<LocalPos>;
   localOpsRef?: React.MutableRefObject<LocalOps>;
   speakingIdsRef?: React.MutableRefObject<Set<string>>;
+  ctfRef?: React.MutableRefObject<CTFState | null>;
+  onFlagEvent?: (e: FlagEvent) => void;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -202,6 +206,7 @@ export function ArenaScene({
       <ambientLight intensity={0.45} />
       <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
       {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
+      {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} speakingIdsRef={speakingIdsRef} />
       ))}
@@ -223,6 +228,8 @@ export function ArenaScene({
         fov={fov}
         localPosRef={localPosRef}
         localOpsRef={localOpsRef}
+        ctfRef={ctfRef}
+        onFlagEvent={onFlagEvent}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
