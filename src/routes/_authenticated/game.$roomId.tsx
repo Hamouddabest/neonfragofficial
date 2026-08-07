@@ -1017,6 +1017,7 @@ function Game() {
       </div>
 
       {/* Weapon selector */}
+      {!isCTF && (
       <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex gap-1.5">
         {(["rifle","sniper","rpg"] as WeaponId[]).map((w, i) => {
           const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : Rocket;
@@ -1038,6 +1039,23 @@ function Game() {
           );
         })}
       </div>
+      )}
+
+      {isCTF && ctfWinner && (
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-black/70 backdrop-blur">
+          <div className="text-center">
+            <div
+              className="font-display text-4xl font-black uppercase tracking-widest"
+              style={{ color: TEAM_COLORS[ctfWinner], textShadow: "0 0 24px currentColor" }}
+            >
+              {ctfWinner} team wins
+            </div>
+            <div className="mt-2 text-xs uppercase tracking-widest text-muted-foreground">
+              {ctfHud?.scoreRed ?? 0} — {ctfHud?.scoreBlue ?? 0}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chat toggle + panel */}
       <button
