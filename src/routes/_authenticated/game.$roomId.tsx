@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, WEAPONS } from "@/components/game/Arena";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, WEAPONS, makeCTFState, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
 import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
@@ -28,11 +28,14 @@ function Game() {
   const myRank: Rank = isOwner ? "owner" : isAdmin ? "admin" : "player";
   const myRankRef = useRef<Rank>("player");
   useEffect(() => { myRankRef.current = myRank; }, [myRank]);
-  const mode = roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: "rifle" as WeaponId, zoom: false });
-  const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 30, maxAmmo: 30, weapon: "rifle", reloading: false });
-  const [weapon, setWeaponState] = useState<WeaponId>("rifle");
+  const isCTF = roomId === "CTF" || roomId.startsWith("CTF-");
+  const mode = isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
+  const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon, zoom: false });
+  const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
+  const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
   function selectWeapon(w: WeaponId) {
+    if (isCTF) return; // pistol only
     controls.current.weapon = w;
     setWeaponState(w);
   }
@@ -58,6 +61,68 @@ function Game() {
   const localPosRef = useRef<LocalPos>({ x: 0, y: 1.6, z: 8 });
   const localOpsRef = useRef<LocalOps>({ teleport: null, frozen: false, god: false, speedMult: 1 });
   const speakingIdsRef = useRef<Set<string>>(new Set());
+
+  // ===== Capture the Flag =====
+  const ctfRef = useRef<CTFState | null>(null);
+  const [ctfHud, setCtfHud] = useState<{ team: Team; scoreRed: number; scoreBlue: number; carrying: boolean; enemyHasOurs: boolean } | null>(null);
+  const [ctfWinner, setCtfWinner] = useState<Team | null>(null);
+  useEffect(() => {
+    if (!isCTF || !identity) { ctfRef.current = null; return; }
+    let h = 0;
+    for (let i = 0; i < identity.id.length; i++) h = (h * 31 + identity.id.charCodeAt(i)) >>> 0;
+    const team: Team = h % 2 === 0 ? "red" : "blue";
+    ctfRef.current = makeCTFState(team, identity.id);
+    setCtfHud({ team, scoreRed: 0, scoreBlue: 0, carrying: false, enemyHasOurs: false });
+  }, [isCTF, identity]);
+  useEffect(() => {
+    if (!isCTF) return;
+    const t = window.setInterval(() => {
+      const c = ctfRef.current;
+      if (!c) return;
+      const enemy: Team = c.myTeam === "red" ? "blue" : "red";
+      setCtfHud({
+        team: c.myTeam,
+        scoreRed: c.scoreRed,
+        scoreBlue: c.scoreBlue,
+        carrying: c[enemy].carrierId === c.myId,
+        enemyHasOurs: !!c[c.myTeam].carrierId,
+      });
+      if (c.scoreRed >= CTF_SCORE_LIMIT) setCtfWinner("red");
+      else if (c.scoreBlue >= CTF_SCORE_LIMIT) setCtfWinner("blue");
+    }, 200);
+    return () => window.clearInterval(t);
+  }, [isCTF]);
+
+  function applyFlagEvent(e: FlagEvent) {
+    const c = ctfRef.current;
+    if (!c) return;
+    const f = c[e.team];
+    if (e.type === "pickup") {
+      f.carrierId = e.byId;
+      f.home = false;
+    } else if (e.type === "drop") {
+      f.carrierId = null;
+      f.home = false;
+      f.x = e.x;
+      f.z = e.z;
+    } else if (e.type === "return") {
+      f.carrierId = null;
+      f.home = true;
+      f.x = CTF_BASES[e.team].x;
+      f.z = CTF_BASES[e.team].z;
+    } else if (e.type === "capture") {
+      const enemy: Team = e.team === "red" ? "blue" : "red";
+      c[enemy].carrierId = null;
+      c[enemy].home = true;
+      c[enemy].x = CTF_BASES[enemy].x;
+      c[enemy].z = CTF_BASES[enemy].z;
+      if (e.team === "red") c.scoreRed += 1; else c.scoreBlue += 1;
+    }
+  }
+
+  function handleFlagEvent(e: FlagEvent) {
+    channelRef.current?.send({ type: "broadcast", event: "flag", payload: e });
+  }
 
   // Player settings (persisted in localStorage)
   const [fov, setFov] = useState<number>(() => {
