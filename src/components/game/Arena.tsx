@@ -296,6 +296,22 @@ function RemotePlayerView({
         </mesh>
       </group>
       <Billboard position={[0, 2, 0]}>
+        {speaking && (
+          <group ref={micRef} position={[rank !== "player" ? -0.85 : -0.6, rank !== "player" ? 0.45 : 0, 0]}>
+            <mesh renderOrder={999}>
+              <capsuleGeometry args={[0.07, 0.12, 4, 8]} />
+              <meshBasicMaterial color="#4ade80" toneMapped={false} depthTest={false} />
+            </mesh>
+            <mesh position={[0, -0.18, 0]} renderOrder={999}>
+              <boxGeometry args={[0.04, 0.1, 0.04]} />
+              <meshBasicMaterial color="#4ade80" toneMapped={false} depthTest={false} />
+            </mesh>
+            <mesh position={[0, -0.24, 0]} renderOrder={999}>
+              <boxGeometry args={[0.2, 0.04, 0.04]} />
+              <meshBasicMaterial color="#4ade80" toneMapped={false} depthTest={false} />
+            </mesh>
+          </group>
+        )}
         {rank !== "player" && (
           <Text
             position={[0, 0.45, 0]}
