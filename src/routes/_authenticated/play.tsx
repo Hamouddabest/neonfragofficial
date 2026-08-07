@@ -238,6 +238,23 @@ function PlayLobby() {
             </div>
           </div>
 
+          <div className="rounded-xl border-2 border-rose-500/60 bg-gradient-to-br from-rose-500/15 to-sky-500/15 p-6 backdrop-blur md:col-span-2">
+            <div className="flex items-center gap-2">
+              <Flag className="size-5 text-rose-400" />
+              <h2 className="font-display text-lg font-bold uppercase tracking-wider">Minigame — Capture the Flag</h2>
+              <span className="ml-auto rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">NEW</span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Red vs Blue, pistols only. Steal the enemy flag, run it back to your base. First team to 3 captures wins.
+            </p>
+            <Button
+              onClick={() => navigate({ to: "/game/$roomId", params: { roomId: "CTF" } })}
+              className="mt-5 h-12 w-full bg-rose-500 font-bold uppercase tracking-widest text-white hover:bg-rose-500/90 shadow-[0_0_20px_rgba(244,63,94,0.6)]"
+            >
+              Play Capture the Flag
+            </Button>
+          </div>
+
           <div className="rounded-xl border border-border bg-card/70 p-6 backdrop-blur">
             <h2 className="font-display text-lg font-bold uppercase tracking-wider">Create a room</h2>
             <p className="mt-1 text-sm text-muted-foreground">Spin up a private arena and share the code with friends.</p>
