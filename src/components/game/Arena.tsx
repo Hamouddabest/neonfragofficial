@@ -108,6 +108,8 @@ export type RemotePlayer = {
   yaw: number;
   alive: boolean;
   rank?: Rank;
+  team?: Team;
+  carrying?: Team | null;
 };
 
 export type PlayerPose = {
@@ -118,6 +120,8 @@ export type PlayerPose = {
   pitch: number;
   alive: boolean;
   rank?: Rank;
+  team?: Team;
+  carrying?: Team | null;
 };
 
 export type ShotEvent = {
