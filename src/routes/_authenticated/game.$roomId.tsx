@@ -349,7 +349,24 @@ function Game() {
           yaw: p.yaw,
           alive: p.alive,
           rank: p.rank ?? existing?.rank ?? "player",
+          team: p.team ?? existing?.team,
+          carrying: p.carrying ?? null,
         });
+      });
+
+      channel.on("broadcast", { event: "flag" }, ({ payload }) => {
+        const e = payload as FlagEvent;
+        if (e.byId === identity.id) return;
+        applyFlagEvent(e);
+        const who = remotePlayersRef.current.get(e.byId)?.name ?? "Someone";
+        const id = ++feedId.current;
+        const msg =
+          e.type === "pickup" ? `${who} grabbed the ${e.team} flag`
+          : e.type === "drop" ? `The ${e.team} flag was dropped`
+          : e.type === "return" ? `${who} returned the ${e.team} flag`
+          : `${who} captured for ${e.team.toUpperCase()}!`;
+        setFeed((f) => [...f, { id, msg }].slice(-4));
+        setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 3000);
       });
 
       channel.on("broadcast", { event: "hit" }, ({ payload }) => {
