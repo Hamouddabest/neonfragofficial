@@ -949,9 +949,8 @@ function Game() {
           </div>
         </div>
 
-        <div className="absolute top-16 right-3 space-y-1">
-          {isCTF && ctfHud && (
-            <div className="mb-2 rounded-md bg-black/70 px-3 py-2 text-center font-display text-xs uppercase tracking-widest backdrop-blur">
+        {isCTF && ctfHud && (
+          <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-md bg-black/70 px-3 py-2 text-center font-display text-xs uppercase tracking-widest backdrop-blur">
               <div className="flex items-center justify-center gap-3">
                 <span style={{ color: TEAM_COLORS.red, textShadow: "0 0 8px currentColor" }}>RED {ctfHud.scoreRed}</span>
                 <span className="text-muted-foreground">/</span>
@@ -968,8 +967,10 @@ function Game() {
               {ctfHud.enemyHasOurs && (
                 <div className="mt-1 text-[10px] font-bold text-red-300">Your flag is stolen!</div>
               )}
-            </div>
-          )}
+          </div>
+        )}
+
+        <div className="absolute top-16 right-3 space-y-1">
           {feed.map((f) => (
             <div key={f.id} className="rounded bg-black/60 px-2 py-1 text-xs text-foreground backdrop-blur">
               {f.msg}
