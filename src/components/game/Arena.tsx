@@ -258,11 +258,13 @@ function RemotePlayerView({
   const [name, setName] = useState<string>(() => remotePlayersRef.current.get(id)?.name ?? "Rival");
   const [rank, setRank] = useState<Rank>(() => remotePlayersRef.current.get(id)?.rank ?? "player");
   const [speaking, setSpeaking] = useState(false);
-  const color = useMemo(() => {
+  const [team, setTeam] = useState<Team | null>(() => remotePlayersRef.current.get(id)?.team ?? null);
+  const baseColor = useMemo(() => {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
     return `hsl(${h}, 90%, 60%)`;
   }, [id]);
+  const color = team ? TEAM_COLORS[team] : baseColor;
   useFrame((_, dt) => {
     const r = remotePlayersRef.current.get(id);
     if (!r || !ref.current) return;
@@ -272,6 +274,8 @@ function RemotePlayerView({
     if (r.name && r.name !== name) setName(r.name);
     const rk = r.rank ?? "player";
     if (rk !== rank) setRank(rk);
+    const tm = r.team ?? null;
+    if (tm !== team) setTeam(tm);
     // walk animation
     const dx = r.x - prev.current.x;
     const dz = r.z - prev.current.z;
