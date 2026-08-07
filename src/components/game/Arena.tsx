@@ -830,6 +830,85 @@ function Game({
   return <group ref={remoteGroup} />;
 }
 
+function CTFWorld({
+  ctfRef,
+  remotePlayersRef,
+}: {
+  ctfRef: React.MutableRefObject<CTFState | null>;
+  remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+}) {
+  return (
+    <group>
+      {(["red", "blue"] as Team[]).map((t) => (
+        <group key={t} position={[CTF_BASES[t].x, 0.02, CTF_BASES[t].z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[2.2, 2.7, 48]} />
+            <meshBasicMaterial color={TEAM_COLORS[t]} toneMapped={false} transparent opacity={0.9} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+            <circleGeometry args={[2.2, 48]} />
+            <meshBasicMaterial color={TEAM_COLORS[t]} toneMapped={false} transparent opacity={0.15} />
+          </mesh>
+          <pointLight color={TEAM_COLORS[t]} intensity={12} distance={14} position={[0, 2, 0]} />
+        </group>
+      ))}
+      <FlagMesh team="red" ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />
+      <FlagMesh team="blue" ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />
+    </group>
+  );
+}
+
+function FlagMesh({
+  team,
+  ctfRef,
+  remotePlayersRef,
+}: {
+  team: Team;
+  ctfRef: React.MutableRefObject<CTFState | null>;
+  remotePlayersRef: React.MutableRefObject<Map<string, RemotePlayer>>;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const cloth = useRef<THREE.Mesh>(null);
+  const t = useRef(0);
+  useFrame((_, dt) => {
+    const ctf = ctfRef.current;
+    const g = ref.current;
+    if (!ctf || !g) return;
+    const f = ctf[team];
+    t.current += dt;
+    let x = f.x;
+    let z = f.z;
+    let y = 0;
+    let visible = true;
+    if (f.carrierId) {
+      if (f.carrierId === ctf.myId) {
+        visible = false; // carried by us — shown in HUD
+      } else {
+        const r = remotePlayersRef.current.get(f.carrierId);
+        if (r) { x = r.x; z = r.z; y = r.y + 1.2; }
+      }
+    }
+    g.visible = visible;
+    g.position.set(x, y, z);
+    g.rotation.y = t.current * 1.2;
+    if (cloth.current) cloth.current.rotation.z = Math.sin(t.current * 3) * 0.08;
+  });
+  const color = TEAM_COLORS[team];
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 1.1, 0]}>
+        <cylinderGeometry args={[0.06, 0.06, 2.2, 8]} />
+        <meshStandardMaterial color="#e5e7eb" emissive="#94a3b8" emissiveIntensity={0.3} />
+      </mesh>
+      <mesh ref={cloth} position={[0.55, 1.75, 0]}>
+        <planeGeometry args={[1.1, 0.7]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
+      <pointLight color={color} intensity={6} distance={9} position={[0, 1.6, 0]} />
+    </group>
+  );
+}
+
 function CustomArenaWorld({ blocks, spawnPoints }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[] }) {
   return (
     <group>
