@@ -357,7 +357,7 @@ function Game() {
 
   // Supabase Realtime: presence + pose broadcast + shots
   useEffect(() => {
-    if (!identity) return;
+    if (!identity || isPractice) return;
     myIdRef.current = identity.id;
     let cancelled = false;
 
@@ -521,7 +521,7 @@ function Game() {
         channelRef.current = null;
       }
     };
-  }, [identity, roomId]);
+  }, [identity, roomId, isPractice]);
 
   // Re-track presence when rank resolves after subscribe
   useEffect(() => {
