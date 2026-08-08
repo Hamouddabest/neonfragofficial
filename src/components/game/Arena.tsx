@@ -482,7 +482,7 @@ function RemotePlayerView({
   );
 }
 
-function ArenaWorld() {
+function ArenaWorld({ quality = "balanced" }: { quality?: Quality }) {
   // floor + walls + cover crates
   const crates = useMemo(() => {
     const arr: { x: number; z: number; s: number }[] = [];
@@ -502,7 +502,7 @@ function ArenaWorld() {
         <meshStandardMaterial color="#1a1530" />
       </mesh>
       {/* grid lines */}
-      <gridHelper args={[ARENA * 2, 40, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />
+      {quality !== "simple" && <gridHelper args={[ARENA * 2, quality === "fancy" ? 40 : 20, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />}
       {/* walls */}
       {[
         [0, ARENA, ARENA * 2, 1],
