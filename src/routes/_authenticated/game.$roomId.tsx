@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, WEAPONS, makeCTFState, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Gamepad2, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -51,7 +51,8 @@ function Game() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const chatId = useRef(0);
-  const [platform, setPlatform] = useState<"none" | "pc" | "mobile">("none");
+  const [platform, setPlatform] = useState<"none" | "pc" | "mobile" | "console">("none");
+  const [padConnected, setPadConnected] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
