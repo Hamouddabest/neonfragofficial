@@ -29,7 +29,8 @@ function Game() {
   const myRankRef = useRef<Rank>("player");
   useEffect(() => { myRankRef.current = myRank; }, [myRank]);
   const isCTF = roomId === "CTF" || roomId.startsWith("CTF-");
-  const mode = isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
+  const isPractice = roomId === "PRACTICE";
+  const mode = isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
@@ -62,6 +63,16 @@ function Game() {
   const localPosRef = useRef<LocalPos>({ x: 0, y: 1.6, z: 8 });
   const localOpsRef = useRef<LocalOps>({ teleport: null, frozen: false, god: false, speedMult: 1 });
   const speakingIdsRef = useRef<Set<string>>(new Set());
+  const practiceStatsRef = useRef<PracticeStats>({ shots: 0, hits: 0 });
+  const [practiceHud, setPracticeHud] = useState({ shots: 0, hits: 0 });
+  useEffect(() => {
+    if (!isPractice) return;
+    const t = window.setInterval(() => setPracticeHud({ ...practiceStatsRef.current }), 250);
+    return () => window.clearInterval(t);
+  }, [isPractice]);
+
+  // Squad (duos/trios queue) assignment, stored by the matchmaker in the lobby
+  const squad = typeof window !== "undefined" ? window.sessionStorage.getItem(`neonfrag.squad.${roomId}`) : null;
 
   // ===== Capture the Flag =====
   const ctfRef = useRef<CTFState | null>(null);
