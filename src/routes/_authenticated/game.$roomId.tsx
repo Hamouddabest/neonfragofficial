@@ -1258,6 +1258,14 @@ function Game() {
         </div>
       )}
 
+      {platform === "console" && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center">
+          <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary backdrop-blur">
+            {padConnected ? "Controller connected" : "Press any button on your controller"} · Left stick move · Right stick aim · RT fire · LT zoom · A/✕ jump · X/□ reload · Bumpers swap weapon · Menu chat
+          </div>
+        </div>
+      )}
+
       {/* Platform selection modal */}
       {settingsOpen && (
         <div className="absolute right-3 top-16 z-40 w-72 rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
@@ -1304,7 +1312,7 @@ function Game() {
           <div className="w-[90%] max-w-md rounded-lg border border-primary/40 bg-black/80 p-6 text-center">
             <h2 className="font-display text-xl uppercase tracking-widest text-primary">Choose your device</h2>
             <p className="mt-2 text-sm text-muted-foreground">Pick how you're playing so we load the right controls.</p>
-            <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="mt-6 grid grid-cols-3 gap-3">
               <button
                 onClick={() => { setPlatform("pc"); getAudio(); }}
                 className="flex flex-col items-center gap-2 rounded-md border border-accent/50 bg-accent/10 p-4 font-display uppercase tracking-widest text-accent hover:bg-accent/20"
@@ -1324,6 +1332,18 @@ function Game() {
                 <Smartphone className="size-8" />
                 <span>Are you on Mobile</span>
                 <span className="text-[10px] normal-case tracking-normal text-muted-foreground">Touch + Joystick</span>
+              </button>
+              <button
+                onClick={async () => {
+                  setPlatform("console");
+                  getAudio();
+                  await enterFullscreen();
+                }}
+                className="flex flex-col items-center gap-2 rounded-md border border-emerald-400/50 bg-emerald-400/10 p-4 font-display uppercase tracking-widest text-emerald-300 hover:bg-emerald-400/20"
+              >
+                <Gamepad2 className="size-8" />
+                <span>Are you on Console</span>
+                <span className="text-[10px] normal-case tracking-normal text-muted-foreground">PS5 / Xbox controller</span>
               </button>
             </div>
           </div>
