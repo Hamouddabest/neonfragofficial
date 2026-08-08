@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, WEAPONS, makeCTFState, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Gamepad2, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -51,7 +51,8 @@ function Game() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const chatId = useRef(0);
-  const [platform, setPlatform] = useState<"none" | "pc" | "mobile">("none");
+  const [platform, setPlatform] = useState<"none" | "pc" | "mobile" | "console">("none");
+  const [padConnected, setPadConnected] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -812,6 +813,70 @@ function Game() {
     };
   }, [platform]);
 
+  // Console controls: PS5 / Xbox gamepad via the Gamepad API
+  useEffect(() => {
+    const onConnect = () => setPadConnected(true);
+    const onDisconnect = () => setPadConnected((navigator.getGamepads?.() ?? []).some(Boolean));
+    window.addEventListener("gamepadconnected", onConnect);
+    window.addEventListener("gamepaddisconnected", onDisconnect);
+    if ((navigator.getGamepads?.() ?? []).some(Boolean)) setPadConnected(true);
+    return () => {
+      window.removeEventListener("gamepadconnected", onConnect);
+      window.removeEventListener("gamepaddisconnected", onDisconnect);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (platform !== "console") return;
+    let raf = 0;
+    const prev: Record<number, boolean> = {};
+    const dead = (v: number) => (Math.abs(v) < 0.18 ? 0 : v);
+    const order: WeaponId[] = isCTF ? ["pistol"] : ["rifle", "sniper", "rpg"];
+    let weaponIdx = 0;
+    const pressed = (gp: Gamepad, i: number) => !!gp.buttons[i]?.pressed;
+    const tap = (gp: Gamepad, i: number) => {
+      const now = pressed(gp, i);
+      const was = prev[i] ?? false;
+      prev[i] = now;
+      return now && !was;
+    };
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const gp = (navigator.getGamepads?.() ?? []).find(Boolean);
+      if (!gp) return;
+      // Sticks: left = move, right = look
+      controls.current.moveX = dead(gp.axes[0] ?? 0);
+      controls.current.moveY = -dead(gp.axes[1] ?? 0);
+      const lookX = dead(gp.axes[2] ?? 0);
+      const lookY = dead(gp.axes[3] ?? 0);
+      const sens = 0.045;
+      controls.current.yaw -= lookX * sens;
+      controls.current.pitch -= lookY * sens;
+      controls.current.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, controls.current.pitch));
+      // R2 / RT fire, L2 / LT zoom
+      controls.current.fire = (gp.buttons[7]?.value ?? 0) > 0.4 || pressed(gp, 7);
+      setZoom((gp.buttons[6]?.value ?? 0) > 0.4 || pressed(gp, 6));
+      // X / A jump, Square / X reload
+      if (tap(gp, 0)) triggerJump();
+      if (tap(gp, 2)) triggerReload();
+      // Bumpers cycle weapons
+      if (order.length > 1) {
+        if (tap(gp, 5)) { weaponIdx = (weaponIdx + 1) % order.length; selectWeapon(order[weaponIdx]!); }
+        if (tap(gp, 4)) { weaponIdx = (weaponIdx - 1 + order.length) % order.length; selectWeapon(order[weaponIdx]!); }
+      }
+      // Options / Menu opens chat
+      if (tap(gp, 9)) setChatOpen((v) => !v);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      controls.current.moveX = 0;
+      controls.current.moveY = 0;
+      controls.current.fire = false;
+      setZoom(false);
+    };
+  }, [platform, isCTF]);
+
   // PC controls: pointer lock, WASD, mouse look, click fire, R reload
   useEffect(() => {
     if (platform !== "pc") return;
@@ -1193,6 +1258,14 @@ function Game() {
         </div>
       )}
 
+      {platform === "console" && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center">
+          <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary backdrop-blur">
+            {padConnected ? "Controller connected" : "Press any button on your controller"} · Left stick move · Right stick aim · RT fire · LT zoom · A/✕ jump · X/□ reload · Bumpers swap weapon · Menu chat
+          </div>
+        </div>
+      )}
+
       {/* Platform selection modal */}
       {settingsOpen && (
         <div className="absolute right-3 top-16 z-40 w-72 rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
@@ -1239,7 +1312,7 @@ function Game() {
           <div className="w-[90%] max-w-md rounded-lg border border-primary/40 bg-black/80 p-6 text-center">
             <h2 className="font-display text-xl uppercase tracking-widest text-primary">Choose your device</h2>
             <p className="mt-2 text-sm text-muted-foreground">Pick how you're playing so we load the right controls.</p>
-            <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="mt-6 grid grid-cols-3 gap-3">
               <button
                 onClick={() => { setPlatform("pc"); getAudio(); }}
                 className="flex flex-col items-center gap-2 rounded-md border border-accent/50 bg-accent/10 p-4 font-display uppercase tracking-widest text-accent hover:bg-accent/20"
@@ -1259,6 +1332,18 @@ function Game() {
                 <Smartphone className="size-8" />
                 <span>Are you on Mobile</span>
                 <span className="text-[10px] normal-case tracking-normal text-muted-foreground">Touch + Joystick</span>
+              </button>
+              <button
+                onClick={async () => {
+                  setPlatform("console");
+                  getAudio();
+                  await enterFullscreen();
+                }}
+                className="flex flex-col items-center gap-2 rounded-md border border-emerald-400/50 bg-emerald-400/10 p-4 font-display uppercase tracking-widest text-emerald-300 hover:bg-emerald-400/20"
+              >
+                <Gamepad2 className="size-8" />
+                <span>Are you on Console</span>
+                <span className="text-[10px] normal-case tracking-normal text-muted-foreground">PS5 / Xbox controller</span>
               </button>
             </div>
           </div>
