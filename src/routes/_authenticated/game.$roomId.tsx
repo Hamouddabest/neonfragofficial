@@ -1112,6 +1112,15 @@ function Game() {
             >
               <SettingsIcon className="size-4" />
             </button>
+            {!isPractice && (
+              <button
+                onClick={() => { setVoicePanelOpen((v) => !v); refreshDevices(); }}
+                className="flex items-center gap-1 rounded-md bg-black/60 px-3 py-2 text-xs font-display uppercase tracking-widest text-accent backdrop-blur"
+                aria-label="Voice settings"
+              >
+                <Headphones className="size-4" />
+              </button>
+            )}
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
             <div>{mode}</div>
