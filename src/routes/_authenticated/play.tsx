@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { useIsOwner } from "@/hooks/use-is-owner";
@@ -19,6 +19,14 @@ export const Route = createFileRoute("/_authenticated/play")({
 function generateRoomCode() {
   return Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
 }
+
+type QueueMode = "solo" | "duos" | "trios" | "ctf";
+const QUEUE_MODES: Record<QueueMode, { label: string; blurb: string; squadSize: number; needed: number }> = {
+  solo:  { label: "Solo",  blurb: "Free-for-all, everyone for themselves", squadSize: 1, needed: 2 },
+  duos:  { label: "Duos",  blurb: "Teams of 2 · squad voice channel",      squadSize: 2, needed: 4 },
+  trios: { label: "Trios", blurb: "Teams of 3 · squad voice channel",      squadSize: 3, needed: 6 },
+  ctf:   { label: "Capture the Flag", blurb: "Red vs Blue · team voice",   squadSize: 0, needed: 4 },
+};
 
 function PlayLobby() {
   const navigate = useNavigate();
