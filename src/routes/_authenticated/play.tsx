@@ -425,6 +425,30 @@ function PlayLobby() {
         )}
       </div>
 
+      {queueMode && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/85 backdrop-blur p-4">
+          <div className="w-full max-w-md rounded-xl border-2 border-emerald-400/60 bg-card p-6 text-center shadow-[0_0_40px_rgba(52,211,153,0.4)]">
+            <Loader2 className="mx-auto size-8 animate-spin text-emerald-300" />
+            <h3 className="mt-4 font-display text-xl font-black uppercase tracking-wider">
+              Searching — {QUEUE_MODES[queueMode].label}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {queuePlayers.length} / {QUEUE_MODES[queueMode].needed} players · {queueSeconds}s
+            </p>
+            <div className="mt-4 flex gap-2">
+              {isHost && queuePlayers.length >= 2 && (
+                <Button onClick={() => startMatchRef.current()} className="h-11 flex-1 bg-emerald-400 font-bold uppercase tracking-widest text-black hover:bg-emerald-400/90">
+                  Start now
+                </Button>
+              )}
+              <Button variant="outline" className="h-11 flex-1" onClick={() => setQueueMode(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {ffaPickerOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur p-4" onClick={() => setFfaPickerOpen(false)}>
           <div className="w-full max-w-lg rounded-xl border-2 border-accent/60 bg-card p-6 shadow-[0_0_40px_var(--accent)]" onClick={(e) => e.stopPropagation()}>
