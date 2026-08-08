@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { useIsOwner } from "@/hooks/use-is-owner";
@@ -20,6 +20,14 @@ function generateRoomCode() {
   return Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
 }
 
+type QueueMode = "solo" | "duos" | "trios" | "ctf";
+const QUEUE_MODES: Record<QueueMode, { label: string; blurb: string; squadSize: number; needed: number }> = {
+  solo:  { label: "Solo",  blurb: "Free-for-all, everyone for themselves", squadSize: 1, needed: 2 },
+  duos:  { label: "Duos",  blurb: "Teams of 2 · squad voice channel",      squadSize: 2, needed: 4 },
+  trios: { label: "Trios", blurb: "Teams of 3 · squad voice channel",      squadSize: 3, needed: 6 },
+  ctf:   { label: "Capture the Flag", blurb: "Red vs Blue · team voice",   squadSize: 0, needed: 4 },
+};
+
 function PlayLobby() {
   const navigate = useNavigate();
   const { identity } = useIdentity();
@@ -30,6 +38,78 @@ function PlayLobby() {
   const [callsign, setCallsign] = useState("");
   const [customCode, setCustomCode] = useState("");
   const [ffaPickerOpen, setFfaPickerOpen] = useState(false);
+  const [queueMode, setQueueMode] = useState<QueueMode | null>(null);
+  const [queuePlayers, setQueuePlayers] = useState<string[]>([]);
+  const [queueSeconds, setQueueSeconds] = useState(0);
+  const [isHost, setIsHost] = useState(false);
+  const queueChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const startMatchRef = useRef<(force?: boolean) => void>(() => {});
+
+  useEffect(() => {
+    if (!queueMode || !identity) return;
+    const cfg = QUEUE_MODES[queueMode];
+    const channel = supabase.channel(`queue:${queueMode}`, { config: { presence: { key: identity.id } } });
+    queueChannelRef.current = channel;
+    let launched = false;
+
+    const launch = (roomId: string, squads: Record<string, string>) => {
+      if (launched) return;
+      launched = true;
+      const mySquad = squads[identity.id];
+      if (mySquad) window.sessionStorage.setItem(`neonfrag.squad.${roomId}`, mySquad);
+      supabase.removeChannel(channel);
+      queueChannelRef.current = null;
+      navigate({ to: "/game/$roomId", params: { roomId } });
+    };
+
+    const makeMatch = (ids: string[]) => {
+      const code = generateRoomCode();
+      const roomId = queueMode === "ctf" ? `CTF-${code}` : `${queueMode.toUpperCase()}-${code}`;
+      const squads: Record<string, string> = {};
+      if (cfg.squadSize > 1) {
+        ids.forEach((id, i) => { squads[id] = String.fromCharCode(65 + Math.floor(i / cfg.squadSize)); });
+      }
+      channel.send({ type: "broadcast", event: "match", payload: { roomId, squads } });
+      launch(roomId, squads);
+    };
+
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState() as Record<string, { name?: string }[]>;
+      const ids = Object.keys(state).sort();
+      setQueuePlayers(ids);
+      const host = ids[0] === identity.id;
+      setIsHost(host);
+      if (host && ids.length >= cfg.needed) makeMatch(ids);
+    });
+
+    channel.on("broadcast", { event: "match" }, ({ payload }) => {
+      const p = payload as { roomId: string; squads: Record<string, string> };
+      launch(p.roomId, p.squads);
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") await channel.track({ name: identity.name });
+    });
+
+    startMatchRef.current = () => {
+      const state = channel.presenceState() as Record<string, unknown>;
+      makeMatch(Object.keys(state).sort());
+    };
+
+    const timer = window.setInterval(() => setQueueSeconds((s) => s + 1), 1000);
+    return () => {
+      window.clearInterval(timer);
+      supabase.removeChannel(channel);
+      queueChannelRef.current = null;
+    };
+  }, [queueMode, identity, navigate]);
+
+  function openQueue(mode: QueueMode) {
+    setQueueSeconds(0);
+    setQueuePlayers([]);
+    setQueueMode(mode);
+  }
 
   const { data: officialMaps } = useQuery({
     queryKey: ["official-maps"],
@@ -211,6 +291,45 @@ function PlayLobby() {
           </div>
         </div>
 
+        <div className="mt-10 rounded-xl border-2 border-emerald-400/60 bg-gradient-to-br from-emerald-400/15 to-primary/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Users className="size-5 text-emerald-300" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Queue up</h2>
+            <span className="ml-auto rounded-full bg-emerald-400 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black">NEW</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pick a mode and get matched with real players. Duos and trios get their own squad voice channel.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(Object.keys(QUEUE_MODES) as QueueMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => openQueue(m)}
+                className="rounded-lg border border-emerald-400/50 bg-emerald-400/10 p-4 text-left hover:bg-emerald-400/20"
+              >
+                <div className="font-display text-sm font-bold uppercase tracking-wider text-emerald-300">{QUEUE_MODES[m].label}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{QUEUE_MODES[m].blurb}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-sky-400/60 bg-gradient-to-br from-sky-400/15 to-accent/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Crosshair className="size-5 text-sky-300" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Free play — aim trainer</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Solo practice range with respawning targets and a live accuracy readout. No opponents, no pressure.
+          </p>
+          <Button
+            onClick={() => navigate({ to: "/game/$roomId", params: { roomId: "PRACTICE" } })}
+            className="mt-5 h-12 w-full bg-sky-400 font-bold uppercase tracking-widest text-black hover:bg-sky-400/90"
+          >
+            Enter free play
+          </Button>
+        </div>
+
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           <div className="rounded-xl border-2 border-accent/60 bg-gradient-to-br from-accent/15 to-primary/10 p-6 backdrop-blur md:col-span-2">
             <div className="flex items-center gap-2">
@@ -305,6 +424,30 @@ function PlayLobby() {
           </div>
         )}
       </div>
+
+      {queueMode && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/85 backdrop-blur p-4">
+          <div className="w-full max-w-md rounded-xl border-2 border-emerald-400/60 bg-card p-6 text-center shadow-[0_0_40px_rgba(52,211,153,0.4)]">
+            <Loader2 className="mx-auto size-8 animate-spin text-emerald-300" />
+            <h3 className="mt-4 font-display text-xl font-black uppercase tracking-wider">
+              Searching — {QUEUE_MODES[queueMode].label}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {queuePlayers.length} / {QUEUE_MODES[queueMode].needed} players · {queueSeconds}s
+            </p>
+            <div className="mt-4 flex gap-2">
+              {isHost && queuePlayers.length >= 2 && (
+                <Button onClick={() => startMatchRef.current()} className="h-11 flex-1 bg-emerald-400 font-bold uppercase tracking-widest text-black hover:bg-emerald-400/90">
+                  Start now
+                </Button>
+              )}
+              <Button variant="outline" className="h-11 flex-1" onClick={() => setQueueMode(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {ffaPickerOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur p-4" onClick={() => setFfaPickerOpen(false)}>

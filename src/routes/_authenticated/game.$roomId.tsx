@@ -1,12 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, WEAPONS, makeCTFState, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Gamepad2, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, WEAPONS, makeCTFState, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
+import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useAuth } from "@/hooks/use-auth";
-import { Room, RoomEvent, Track, RemoteAudioTrack, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
+import { Room, RoomEvent, Track, RemoteAudioTrack, type LocalAudioTrack, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
 import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
 const OWNER_EMAIL = "totallybro541@gmail.com";
@@ -29,7 +29,8 @@ function Game() {
   const myRankRef = useRef<Rank>("player");
   useEffect(() => { myRankRef.current = myRank; }, [myRank]);
   const isCTF = roomId === "CTF" || roomId.startsWith("CTF-");
-  const mode = isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
+  const isPractice = roomId === "PRACTICE";
+  const mode = isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
@@ -62,6 +63,16 @@ function Game() {
   const localPosRef = useRef<LocalPos>({ x: 0, y: 1.6, z: 8 });
   const localOpsRef = useRef<LocalOps>({ teleport: null, frozen: false, god: false, speedMult: 1 });
   const speakingIdsRef = useRef<Set<string>>(new Set());
+  const practiceStatsRef = useRef<PracticeStats>({ shots: 0, hits: 0 });
+  const [practiceHud, setPracticeHud] = useState({ shots: 0, hits: 0 });
+  useEffect(() => {
+    if (!isPractice) return;
+    const t = window.setInterval(() => setPracticeHud({ ...practiceStatsRef.current }), 250);
+    return () => window.clearInterval(t);
+  }, [isPractice]);
+
+  // Squad (duos/trios queue) assignment, stored by the matchmaker in the lobby
+  const squad = typeof window !== "undefined" ? window.sessionStorage.getItem(`neonfrag.squad.${roomId}`) : null;
 
   // ===== Capture the Flag =====
   const ctfRef = useRef<CTFState | null>(null);
@@ -137,6 +148,61 @@ function Game() {
     return window.localStorage.getItem("neonfrag.bobbing") !== "0";
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [quality, setQuality] = useState<Quality>(() => {
+    if (typeof window === "undefined") return "balanced";
+    const v = window.localStorage.getItem("neonfrag.quality");
+    return v === "simple" || v === "fancy" || v === "balanced" ? v : "balanced";
+  });
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.quality", quality); } catch { /* noop */ } }, [quality]);
+
+  // ===== Voice settings =====
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false);
+  const [devices, setDevices] = useState<{ inputs: MediaDeviceInfo[]; outputs: MediaDeviceInfo[] }>({ inputs: [], outputs: [] });
+  const [inputId, setInputId] = useState<string>(() => (typeof window === "undefined" ? "" : window.localStorage.getItem("neonfrag.mic") ?? ""));
+  const [outputId, setOutputId] = useState<string>(() => (typeof window === "undefined" ? "" : window.localStorage.getItem("neonfrag.spk") ?? ""));
+  const [sensitivity, setSensitivity] = useState<number>(() => {
+    if (typeof window === "undefined") return 8;
+    const v = Number(window.localStorage.getItem("neonfrag.micSens"));
+    return Number.isFinite(v) && v >= 0 && v <= 60 ? v : 8;
+  });
+  const sensitivityRef = useRef(sensitivity);
+  useEffect(() => { sensitivityRef.current = sensitivity; try { window.localStorage.setItem("neonfrag.micSens", String(sensitivity)); } catch { /* noop */ } }, [sensitivity]);
+  const [micLevel, setMicLevel] = useState(0);
+  const [voiceScope, setVoiceScope] = useState<"all" | "team">("team");
+  const myTeamKey = isCTF ? (ctfHud?.team ?? null) : squad;
+  const voiceRoomId = myTeamKey && voiceScope === "team" ? `${roomId}__${myTeamKey}` : roomId;
+
+  async function refreshDevices() {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setDevices({
+        inputs: list.filter((d) => d.kind === "audioinput"),
+        outputs: list.filter((d) => d.kind === "audiooutput"),
+      });
+    } catch { /* noop */ }
+  }
+  async function requestMicPermission() {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+    } catch { /* noop */ }
+    await refreshDevices();
+  }
+  useEffect(() => {
+    refreshDevices();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refreshDevices);
+    return () => navigator.mediaDevices?.removeEventListener?.("devicechange", refreshDevices);
+  }, []);
+  async function changeInput(id: string) {
+    setInputId(id);
+    try { window.localStorage.setItem("neonfrag.mic", id); } catch { /* noop */ }
+    try { await roomRef.current?.switchActiveDevice("audioinput", id); } catch { /* noop */ }
+  }
+  async function changeOutput(id: string) {
+    setOutputId(id);
+    try { window.localStorage.setItem("neonfrag.spk", id); } catch { /* noop */ }
+    try { await roomRef.current?.switchActiveDevice("audiooutput", id); } catch { /* noop */ }
+  }
   useEffect(() => { try { window.localStorage.setItem("neonfrag.fov", String(fov)); } catch { /* noop */ } }, [fov]);
   useEffect(() => { try { window.localStorage.setItem("neonfrag.bobbing", viewBobbing ? "1" : "0"); } catch { /* noop */ } }, [viewBobbing]);
 
@@ -291,7 +357,7 @@ function Game() {
 
   // Supabase Realtime: presence + pose broadcast + shots
   useEffect(() => {
-    if (!identity) return;
+    if (!identity || isPractice) return;
     myIdRef.current = identity.id;
     let cancelled = false;
 
@@ -455,7 +521,7 @@ function Game() {
         channelRef.current = null;
       }
     };
-  }, [identity, roomId]);
+  }, [identity, roomId, isPractice]);
 
   // Re-track presence when rank resolves after subscribe
   useEffect(() => {
@@ -466,7 +532,7 @@ function Game() {
 
   // Connect LiveKit voice room
   useEffect(() => {
-    if (!identity) return;
+    if (!identity || isPractice) return;
     let cancelled = false;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
@@ -537,8 +603,8 @@ function Game() {
           name = prof?.username ?? `P${identity.id.slice(0, 4)}`;
         }
         const { token, url } = identity.isGuest
-          ? await getLiveKitTokenPublic({ data: { roomId, name, identity: identity.id } })
-          : await getLiveKitToken({ data: { roomId, name } });
+          ? await getLiveKitTokenPublic({ data: { roomId: voiceRoomId, name, identity: identity.id } })
+          : await getLiveKitToken({ data: { roomId: voiceRoomId, name } });
         if (cancelled) return;
         await room.connect(url, token);
         if (cancelled) {
@@ -546,6 +612,8 @@ function Game() {
           return;
         }
         await room.localParticipant.setMicrophoneEnabled(false);
+        if (inputId) { try { await room.switchActiveDevice("audioinput", inputId); } catch { /* noop */ } }
+        if (outputId) { try { await room.switchActiveDevice("audiooutput", outputId); } catch { /* noop */ } }
         setMuted(true);
         setVoiceState("connected");
         setVoiceCount(room.numParticipants);
@@ -564,7 +632,57 @@ function Game() {
       room.disconnect().catch(() => {});
       roomRef.current = null;
     };
-  }, [identity, roomId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity, voiceRoomId, isPractice]);
+
+  // Mic level meter + sensitivity gate (voice activation)
+  useEffect(() => {
+    if (voiceState !== "connected" || muted) { setMicLevel(0); return; }
+    let raf = 0;
+    let ctx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let srcTrackId = "";
+    const data = new Uint8Array(1024);
+    let lastLoud = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const room = roomRef.current;
+      const pub = room?.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const track = pub?.track as LocalAudioTrack | undefined;
+      const mst = track?.mediaStreamTrack;
+      if (!track || !mst) return;
+      if (mst.id !== srcTrackId) {
+        srcTrackId = mst.id;
+        try {
+          ctx?.close();
+          const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          ctx = new Ctx();
+          analyser = ctx.createAnalyser();
+          analyser.fftSize = 2048;
+          ctx.createMediaStreamSource(new MediaStream([mst])).connect(analyser);
+        } catch { return; }
+      }
+      if (!analyser) return;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) { const v = (data[i]! - 128) / 128; sum += v * v; }
+      const rms = Math.sqrt(sum / data.length);
+      const level = Math.min(1, rms * 4);
+      setMicLevel(level);
+      const threshold = sensitivityRef.current / 100;
+      const now = performance.now();
+      if (level >= threshold) lastLoud = now;
+      const shouldSpeak = threshold <= 0 || now - lastLoud < 300;
+      if (shouldSpeak && track.isMuted) track.unmute().catch(() => {});
+      else if (!shouldSpeak && !track.isMuted) track.mute().catch(() => {});
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      ctx?.close().catch(() => {});
+      setMicLevel(0);
+    };
+  }, [voiceState, muted]);
 
   async function toggleMute() {
     const room = roomRef.current;
@@ -961,6 +1079,9 @@ function Game() {
         localOpsRef={localOpsRef}
         ctfRef={isCTF ? ctfRef : undefined}
         onFlagEvent={isCTF ? handleFlagEvent : undefined}
+        quality={quality}
+        practice={isPractice}
+        practiceStatsRef={practiceStatsRef}
       />
 
       {/* HUD */}
@@ -991,6 +1112,15 @@ function Game() {
             >
               <SettingsIcon className="size-4" />
             </button>
+            {!isPractice && (
+              <button
+                onClick={() => { setVoicePanelOpen((v) => !v); refreshDevices(); }}
+                className="flex items-center gap-1 rounded-md bg-black/60 px-3 py-2 text-xs font-display uppercase tracking-widest text-accent backdrop-blur"
+                aria-label="Voice settings"
+              >
+                <Headphones className="size-4" />
+              </button>
+            )}
           </div>
           <div className="rounded-md bg-black/60 px-3 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
             <div>{mode}</div>
@@ -1014,6 +1144,15 @@ function Game() {
             <div className="text-accent">D {hud.deaths}</div>
           </div>
         </div>
+
+        {isPractice && (
+          <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-md bg-black/70 px-4 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
+            <div>Targets hit <span className="text-accent">{practiceHud.hits}</span></div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Accuracy {practiceHud.shots > 0 ? Math.round((practiceHud.hits / practiceHud.shots) * 100) : 0}% · {practiceHud.shots} shots
+            </div>
+          </div>
+        )}
 
         {isCTF && ctfHud && (
           <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-md bg-black/70 px-3 py-2 text-center font-display text-xs uppercase tracking-widest backdrop-blur">
@@ -1304,6 +1443,134 @@ function Game() {
           <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
             Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC.
           </p>
+
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="text-xs font-display uppercase tracking-widest text-accent">Graphics</div>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {(["simple", "balanced", "fancy"] as Quality[]).map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuality(q)}
+                  className={`rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest transition-colors ${
+                    quality === q
+                      ? "border-primary bg-primary/25 text-primary shadow-[0_0_12px_var(--primary)]"
+                      : "border-border bg-black/60 text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-pressed={quality === q}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+              {quality === "simple"
+                ? "Lowest resolution, no sky/shadows — best FPS on phones."
+                : quality === "balanced"
+                  ? "Sky and grid on, shadows off."
+                  : "Full resolution, shadows, fog and dense grid."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Voice settings panel */}
+      {voicePanelOpen && (
+        <div className="absolute right-3 top-16 z-40 w-80 max-h-[75vh] overflow-y-auto rounded-md border border-accent/40 bg-black/90 p-4 backdrop-blur">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-display text-sm uppercase tracking-widest text-accent">
+              <Sliders className="size-4" /> Voice chat
+            </h3>
+            <button onClick={() => setVoicePanelOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close voice settings">
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {voiceState === "connected" ? `Connected · ${voiceCount + 1} in channel` : voiceState === "connecting" ? "Connecting…" : voiceState === "error" ? "Voice unavailable" : "Idle"}
+          </div>
+
+          {myTeamKey && (
+            <div className="mt-3">
+              <div className="text-xs font-display uppercase tracking-widest text-accent">Channel</div>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {(["team", "all"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setVoiceScope(s)}
+                    className={`rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${
+                      voiceScope === s ? "border-accent bg-accent/25 text-accent" : "border-border bg-black/60 text-muted-foreground"
+                    }`}
+                  >
+                    {s === "team" ? `Team ${String(myTeamKey).toUpperCase()}` : "Everyone"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <label className="mt-4 block text-xs font-display uppercase tracking-widest text-accent">Microphone</label>
+          <select
+            value={inputId}
+            onChange={(e) => changeInput(e.target.value)}
+            className="mt-1 w-full rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          >
+            <option value="">System default</option>
+            {devices.inputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>{d.label || `Microphone ${d.deviceId.slice(0, 6)}`}</option>
+            ))}
+          </select>
+
+          <label className="mt-3 block text-xs font-display uppercase tracking-widest text-accent">Output / speakers</label>
+          <select
+            value={outputId}
+            onChange={(e) => changeOutput(e.target.value)}
+            className="mt-1 w-full rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          >
+            <option value="">System default</option>
+            {devices.outputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>{d.label || `Output ${d.deviceId.slice(0, 6)}`}</option>
+            ))}
+          </select>
+
+          {devices.inputs.every((d) => !d.label) && (
+            <button
+              onClick={requestMicPermission}
+              className="mt-2 w-full rounded border border-accent/60 bg-accent/15 px-2 py-1.5 text-[10px] font-display uppercase tracking-widest text-accent"
+            >
+              Allow mic access to list devices
+            </button>
+          )}
+
+          <label className="mt-4 block text-xs font-display uppercase tracking-widest text-accent">
+            Mic sensitivity: <span className="text-primary">{sensitivity === 0 ? "Always on" : `${sensitivity}%`}</span>
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={60}
+            step={1}
+            value={sensitivity}
+            onChange={(e) => setSensitivity(Number(e.target.value))}
+            className="mt-2 w-full accent-[var(--accent)]"
+          />
+          <div className="mt-2 h-2 w-full overflow-hidden rounded bg-white/10">
+            <div className="h-full bg-emerald-400 transition-[width] duration-75" style={{ width: `${Math.round(micLevel * 100)}%` }} />
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+            Your mic only transmits when the green bar passes the sensitivity threshold. Set to 0 to always transmit.
+          </p>
+
+          <button
+            onClick={toggleMute}
+            disabled={voiceState !== "connected"}
+            className={`mt-3 flex w-full items-center justify-center gap-2 rounded border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${
+              muted ? "border-destructive/60 text-destructive" : "border-accent/60 bg-accent/20 text-accent"
+            } disabled:opacity-50`}
+          >
+            {muted ? <MicOff className="size-4" /> : <Mic className="size-4" />} {muted ? "Unmute" : "Mute"}
+          </button>
         </div>
       )}
 

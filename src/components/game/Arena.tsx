@@ -12,6 +12,22 @@ const JUMP_VELOCITY = 8.5;
 export type WeaponId = "rifle" | "sniper" | "rpg" | "pistol";
 export type Rank = "owner" | "admin" | "player";
 export type Team = "red" | "blue";
+export type Quality = "simple" | "balanced" | "fancy";
+
+export type PracticeTarget = { id: number; x: number; y: number; z: number; alive: boolean; respawnAt: number; seed: number };
+export type PracticeStats = { shots: number; hits: number };
+
+export function makePracticeTargets(count = 8): PracticeTarget[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: (Math.random() - 0.5) * (ARENA - 8),
+    y: 1.2 + Math.random() * 2.2,
+    z: -6 - Math.random() * (ARENA - 12),
+    alive: true,
+    respawnAt: 0,
+    seed: Math.random() * 10,
+  }));
+}
 
 export type FlagState = {
   home: boolean;
@@ -179,6 +195,9 @@ export function ArenaScene({
   speakingIdsRef,
   ctfRef,
   onFlagEvent,
+  quality = "balanced",
+  practice = false,
+  practiceStatsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -199,16 +218,28 @@ export function ArenaScene({
   speakingIdsRef?: React.MutableRefObject<Set<string>>;
   ctfRef?: React.MutableRefObject<CTFState | null>;
   onFlagEvent?: (e: FlagEvent) => void;
+  quality?: Quality;
+  practice?: boolean;
+  practiceStatsRef?: React.MutableRefObject<PracticeStats>;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
+  const targetsRef = useRef<PracticeTarget[]>([]);
+  if (practice && targetsRef.current.length === 0) targetsRef.current = makePracticeTargets();
   return (
     <Canvas shadows camera={{ fov, near: 0.05, far: 300 }}>
-      <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
-      <ambientLight intensity={0.45} />
-      <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
-      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
+      <QualityController quality={quality} />
+      {quality === "simple" ? (
+        <color attach="background" args={["#0a0716"]} />
+      ) : (
+        <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
+      )}
+      {quality === "fancy" && <fog attach="fog" args={["#0a0716", 40, 140]} />}
+      <ambientLight intensity={quality === "simple" ? 0.9 : 0.45} />
+      <directionalLight position={[20, 30, 10]} intensity={quality === "simple" ? 0.7 : 1.1} castShadow={quality === "fancy"} />
+      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} /> : <ArenaWorld quality={quality} />}
       {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
+      {practice && <PracticeTargets targetsRef={targetsRef} />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} speakingIdsRef={speakingIdsRef} />
       ))}
@@ -232,10 +263,58 @@ export function ArenaScene({
         localOpsRef={localOpsRef}
         ctfRef={ctfRef}
         onFlagEvent={onFlagEvent}
+        targetsRef={practice ? targetsRef : undefined}
+        practiceStatsRef={practiceStatsRef}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
     </Canvas>
+  );
+}
+
+function QualityController({ quality }: { quality: Quality }) {
+  const gl = useThree((s) => s.gl);
+  const setDpr = useThree((s) => s.setDpr);
+  useEffect(() => {
+    const max = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    const dpr = quality === "simple" ? Math.min(0.75, max) : quality === "balanced" ? Math.min(1.25, max) : Math.min(2, max);
+    setDpr(dpr);
+    gl.shadowMap.enabled = quality === "fancy";
+    gl.shadowMap.needsUpdate = true;
+  }, [quality, gl, setDpr]);
+  return null;
+}
+
+function PracticeTargets({ targetsRef }: { targetsRef: React.MutableRefObject<PracticeTarget[]> }) {
+  const group = useRef<THREE.Group>(null);
+  const t = useRef(0);
+  useFrame((_, dt) => {
+    t.current += dt;
+    const g = group.current;
+    if (!g) return;
+    g.children.forEach((child, i) => {
+      const tg = targetsRef.current[i];
+      if (!tg) return;
+      child.visible = tg.alive;
+      child.position.set(tg.x, tg.y + Math.sin(t.current * 1.5 + tg.seed) * 0.5, tg.z);
+      child.rotation.y = t.current * 1.2 + tg.seed;
+    });
+  });
+  return (
+    <group ref={group}>
+      {targetsRef.current.map((tg) => (
+        <group key={tg.id}>
+          <mesh>
+            <sphereGeometry args={[0.55, 20, 20]} />
+            <meshStandardMaterial color="#f43f5e" emissive="#f43f5e" emissiveIntensity={1.2} toneMapped={false} />
+          </mesh>
+          <mesh rotation={[0, 0, 0]}>
+            <torusGeometry args={[0.85, 0.06, 8, 32]} />
+            <meshBasicMaterial color="#22d3ee" toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
   );
 }
 
@@ -403,7 +482,7 @@ function RemotePlayerView({
   );
 }
 
-function ArenaWorld() {
+function ArenaWorld({ quality = "balanced" }: { quality?: Quality }) {
   // floor + walls + cover crates
   const crates = useMemo(() => {
     const arr: { x: number; z: number; s: number }[] = [];
@@ -423,7 +502,7 @@ function ArenaWorld() {
         <meshStandardMaterial color="#1a1530" />
       </mesh>
       {/* grid lines */}
-      <gridHelper args={[ARENA * 2, 40, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />
+      {quality !== "simple" && <gridHelper args={[ARENA * 2, quality === "fancy" ? 40 : 20, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />}
       {/* walls */}
       {[
         [0, ARENA, ARENA * 2, 1],
@@ -466,6 +545,8 @@ function Game({
   localOpsRef,
   ctfRef,
   onFlagEvent,
+  targetsRef,
+  practiceStatsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -486,6 +567,8 @@ function Game({
   localOpsRef?: React.MutableRefObject<LocalOps>;
   ctfRef?: React.MutableRefObject<CTFState | null>;
   onFlagEvent?: (e: FlagEvent) => void;
+  targetsRef?: React.MutableRefObject<PracticeTarget[]>;
+  practiceStatsRef?: React.MutableRefObject<PracticeStats>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -745,6 +828,18 @@ function Game({
     }
 
     const reloading = reloadEnd.current > 0;
+    // Practice targets: respawn
+    if (targetsRef) {
+      for (const tg of targetsRef.current) {
+        if (!tg.alive && now >= tg.respawnAt) {
+          tg.alive = true;
+          tg.x = (Math.random() - 0.5) * (ARENA - 8);
+          tg.y = 1.2 + Math.random() * 2.2;
+          tg.z = -6 - Math.random() * (ARENA - 12);
+          tg.seed = Math.random() * 10;
+        }
+      }
+    }
     // Fire
     if (c.fire && !reloading && now - lastFire.current > spec.cooldownMs && player.current.ammo[weapon] > 0 && player.current.hp > 0) {
       lastFire.current = now;
@@ -801,6 +896,29 @@ function Game({
           player.current.kills += (h.damage >= 90 || spec.splashRadius > 0) ? 1 : 0;
           if (h.damage >= 90) onKillFeed(`You eliminated ${r.name}`);
           else if (spec.splashRadius > 0) onKillFeed(`You blasted ${r.name}`);
+        }
+      }
+
+      // Practice targets hitscan
+      if (targetsRef) {
+        if (practiceStatsRef) practiceStatsRef.current.shots += 1;
+        let bestT: PracticeTarget | null = null;
+        let bestD = Infinity;
+        for (const tg of targetsRef.current) {
+          if (!tg.alive) continue;
+          const sphere = new THREE.Sphere(new THREE.Vector3(tg.x, tg.y, tg.z), 0.85);
+          const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
+          if (hit) {
+            const d = hit.distanceTo(origin);
+            if (d < bestD) { bestD = d; bestT = tg; }
+          }
+        }
+        if (bestT) {
+          bestT.alive = false;
+          bestT.respawnAt = now + 900;
+          if (practiceStatsRef) practiceStatsRef.current.hits += 1;
+          player.current.kills += 1;
+          onKillFeed("Target down");
         }
       }
     }
@@ -913,14 +1031,14 @@ function FlagMesh({
   );
 }
 
-function CustomArenaWorld({ blocks, spawnPoints }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[] }) {
+function CustomArenaWorld({ blocks, spawnPoints, quality = "balanced" }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[]; quality?: Quality }) {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ARENA * 2, ARENA * 2]} />
         <meshStandardMaterial color="#1a1530" />
       </mesh>
-      <gridHelper args={[ARENA * 2, 40, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />
+      {quality !== "simple" && <gridHelper args={[ARENA * 2, quality === "fancy" ? 40 : 20, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />}
       {[
         [0, ARENA, ARENA * 2, 1],
         [0, -ARENA, ARENA * 2, 1],
