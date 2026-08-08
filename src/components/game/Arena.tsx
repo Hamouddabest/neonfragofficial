@@ -545,6 +545,8 @@ function Game({
   localOpsRef,
   ctfRef,
   onFlagEvent,
+  targetsRef,
+  practiceStatsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -565,6 +567,8 @@ function Game({
   localOpsRef?: React.MutableRefObject<LocalOps>;
   ctfRef?: React.MutableRefObject<CTFState | null>;
   onFlagEvent?: (e: FlagEvent) => void;
+  targetsRef?: React.MutableRefObject<PracticeTarget[]>;
+  practiceStatsRef?: React.MutableRefObject<PracticeStats>;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -824,6 +828,18 @@ function Game({
     }
 
     const reloading = reloadEnd.current > 0;
+    // Practice targets: respawn
+    if (targetsRef) {
+      for (const tg of targetsRef.current) {
+        if (!tg.alive && now >= tg.respawnAt) {
+          tg.alive = true;
+          tg.x = (Math.random() - 0.5) * (ARENA - 8);
+          tg.y = 1.2 + Math.random() * 2.2;
+          tg.z = -6 - Math.random() * (ARENA - 12);
+          tg.seed = Math.random() * 10;
+        }
+      }
+    }
     // Fire
     if (c.fire && !reloading && now - lastFire.current > spec.cooldownMs && player.current.ammo[weapon] > 0 && player.current.hp > 0) {
       lastFire.current = now;
@@ -880,6 +896,29 @@ function Game({
           player.current.kills += (h.damage >= 90 || spec.splashRadius > 0) ? 1 : 0;
           if (h.damage >= 90) onKillFeed(`You eliminated ${r.name}`);
           else if (spec.splashRadius > 0) onKillFeed(`You blasted ${r.name}`);
+        }
+      }
+
+      // Practice targets hitscan
+      if (targetsRef) {
+        if (practiceStatsRef) practiceStatsRef.current.shots += 1;
+        let bestT: PracticeTarget | null = null;
+        let bestD = Infinity;
+        for (const tg of targetsRef.current) {
+          if (!tg.alive) continue;
+          const sphere = new THREE.Sphere(new THREE.Vector3(tg.x, tg.y, tg.z), 0.85);
+          const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
+          if (hit) {
+            const d = hit.distanceTo(origin);
+            if (d < bestD) { bestD = d; bestT = tg; }
+          }
+        }
+        if (bestT) {
+          bestT.alive = false;
+          bestT.respawnAt = now + 900;
+          if (practiceStatsRef) practiceStatsRef.current.hits += 1;
+          player.current.kills += 1;
+          onKillFeed("Target down");
         }
       }
     }
