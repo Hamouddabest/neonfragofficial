@@ -12,6 +12,22 @@ const JUMP_VELOCITY = 8.5;
 export type WeaponId = "rifle" | "sniper" | "rpg" | "pistol";
 export type Rank = "owner" | "admin" | "player";
 export type Team = "red" | "blue";
+export type Quality = "simple" | "balanced" | "fancy";
+
+export type PracticeTarget = { id: number; x: number; y: number; z: number; alive: boolean; respawnAt: number; seed: number };
+export type PracticeStats = { shots: number; hits: number };
+
+export function makePracticeTargets(count = 8): PracticeTarget[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: (Math.random() - 0.5) * (ARENA - 8),
+    y: 1.2 + Math.random() * 2.2,
+    z: -6 - Math.random() * (ARENA - 12),
+    alive: true,
+    respawnAt: 0,
+    seed: Math.random() * 10,
+  }));
+}
 
 export type FlagState = {
   home: boolean;
