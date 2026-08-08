@@ -992,14 +992,14 @@ function FlagMesh({
   );
 }
 
-function CustomArenaWorld({ blocks, spawnPoints }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[] }) {
+function CustomArenaWorld({ blocks, spawnPoints, quality = "balanced" }: { blocks: ArenaBlock[]; spawnPoints: SpawnPoint[]; quality?: Quality }) {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ARENA * 2, ARENA * 2]} />
         <meshStandardMaterial color="#1a1530" />
       </mesh>
-      <gridHelper args={[ARENA * 2, 40, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />
+      {quality !== "simple" && <gridHelper args={[ARENA * 2, quality === "fancy" ? 40 : 20, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />}
       {[
         [0, ARENA, ARENA * 2, 1],
         [0, -ARENA, ARENA * 2, 1],
