@@ -148,6 +148,61 @@ function Game() {
     return window.localStorage.getItem("neonfrag.bobbing") !== "0";
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [quality, setQuality] = useState<Quality>(() => {
+    if (typeof window === "undefined") return "balanced";
+    const v = window.localStorage.getItem("neonfrag.quality");
+    return v === "simple" || v === "fancy" || v === "balanced" ? v : "balanced";
+  });
+  useEffect(() => { try { window.localStorage.setItem("neonfrag.quality", quality); } catch { /* noop */ } }, [quality]);
+
+  // ===== Voice settings =====
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false);
+  const [devices, setDevices] = useState<{ inputs: MediaDeviceInfo[]; outputs: MediaDeviceInfo[] }>({ inputs: [], outputs: [] });
+  const [inputId, setInputId] = useState<string>(() => (typeof window === "undefined" ? "" : window.localStorage.getItem("neonfrag.mic") ?? ""));
+  const [outputId, setOutputId] = useState<string>(() => (typeof window === "undefined" ? "" : window.localStorage.getItem("neonfrag.spk") ?? ""));
+  const [sensitivity, setSensitivity] = useState<number>(() => {
+    if (typeof window === "undefined") return 8;
+    const v = Number(window.localStorage.getItem("neonfrag.micSens"));
+    return Number.isFinite(v) && v >= 0 && v <= 60 ? v : 8;
+  });
+  const sensitivityRef = useRef(sensitivity);
+  useEffect(() => { sensitivityRef.current = sensitivity; try { window.localStorage.setItem("neonfrag.micSens", String(sensitivity)); } catch { /* noop */ } }, [sensitivity]);
+  const [micLevel, setMicLevel] = useState(0);
+  const [voiceScope, setVoiceScope] = useState<"all" | "team">("team");
+  const myTeamKey = isCTF ? (ctfHud?.team ?? null) : squad;
+  const voiceRoomId = myTeamKey && voiceScope === "team" ? `${roomId}__${myTeamKey}` : roomId;
+
+  async function refreshDevices() {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setDevices({
+        inputs: list.filter((d) => d.kind === "audioinput"),
+        outputs: list.filter((d) => d.kind === "audiooutput"),
+      });
+    } catch { /* noop */ }
+  }
+  async function requestMicPermission() {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+    } catch { /* noop */ }
+    await refreshDevices();
+  }
+  useEffect(() => {
+    refreshDevices();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refreshDevices);
+    return () => navigator.mediaDevices?.removeEventListener?.("devicechange", refreshDevices);
+  }, []);
+  async function changeInput(id: string) {
+    setInputId(id);
+    try { window.localStorage.setItem("neonfrag.mic", id); } catch { /* noop */ }
+    try { await roomRef.current?.switchActiveDevice("audioinput", id); } catch { /* noop */ }
+  }
+  async function changeOutput(id: string) {
+    setOutputId(id);
+    try { window.localStorage.setItem("neonfrag.spk", id); } catch { /* noop */ }
+    try { await roomRef.current?.switchActiveDevice("audiooutput", id); } catch { /* noop */ }
+  }
   useEffect(() => { try { window.localStorage.setItem("neonfrag.fov", String(fov)); } catch { /* noop */ } }, [fov]);
   useEffect(() => { try { window.localStorage.setItem("neonfrag.bobbing", viewBobbing ? "1" : "0"); } catch { /* noop */ } }, [viewBobbing]);
 
