@@ -38,6 +38,78 @@ function PlayLobby() {
   const [callsign, setCallsign] = useState("");
   const [customCode, setCustomCode] = useState("");
   const [ffaPickerOpen, setFfaPickerOpen] = useState(false);
+  const [queueMode, setQueueMode] = useState<QueueMode | null>(null);
+  const [queuePlayers, setQueuePlayers] = useState<string[]>([]);
+  const [queueSeconds, setQueueSeconds] = useState(0);
+  const [isHost, setIsHost] = useState(false);
+  const queueChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const startMatchRef = useRef<(force?: boolean) => void>(() => {});
+
+  useEffect(() => {
+    if (!queueMode || !identity) return;
+    const cfg = QUEUE_MODES[queueMode];
+    const channel = supabase.channel(`queue:${queueMode}`, { config: { presence: { key: identity.id } } });
+    queueChannelRef.current = channel;
+    let launched = false;
+
+    const launch = (roomId: string, squads: Record<string, string>) => {
+      if (launched) return;
+      launched = true;
+      const mySquad = squads[identity.id];
+      if (mySquad) window.sessionStorage.setItem(`neonfrag.squad.${roomId}`, mySquad);
+      supabase.removeChannel(channel);
+      queueChannelRef.current = null;
+      navigate({ to: "/game/$roomId", params: { roomId } });
+    };
+
+    const makeMatch = (ids: string[]) => {
+      const code = generateRoomCode();
+      const roomId = queueMode === "ctf" ? `CTF-${code}` : `${queueMode.toUpperCase()}-${code}`;
+      const squads: Record<string, string> = {};
+      if (cfg.squadSize > 1) {
+        ids.forEach((id, i) => { squads[id] = String.fromCharCode(65 + Math.floor(i / cfg.squadSize)); });
+      }
+      channel.send({ type: "broadcast", event: "match", payload: { roomId, squads } });
+      launch(roomId, squads);
+    };
+
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState() as Record<string, { name?: string }[]>;
+      const ids = Object.keys(state).sort();
+      setQueuePlayers(ids);
+      const host = ids[0] === identity.id;
+      setIsHost(host);
+      if (host && ids.length >= cfg.needed) makeMatch(ids);
+    });
+
+    channel.on("broadcast", { event: "match" }, ({ payload }) => {
+      const p = payload as { roomId: string; squads: Record<string, string> };
+      launch(p.roomId, p.squads);
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") await channel.track({ name: displayNameRef.current });
+    });
+
+    startMatchRef.current = () => {
+      const state = channel.presenceState() as Record<string, unknown>;
+      makeMatch(Object.keys(state).sort());
+    };
+
+    const timer = window.setInterval(() => setQueueSeconds((s) => s + 1), 1000);
+    return () => {
+      window.clearInterval(timer);
+      supabase.removeChannel(channel);
+      queueChannelRef.current = null;
+    };
+  }, [queueMode, identity, navigate]);
+
+  function openQueue(mode: QueueMode) {
+    setQueueSeconds(0);
+    setQueuePlayers([]);
+    setQueueMode(mode);
+  }
 
   const { data: officialMaps } = useQuery({
     queryKey: ["official-maps"],
