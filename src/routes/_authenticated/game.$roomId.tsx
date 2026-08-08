@@ -532,7 +532,7 @@ function Game() {
 
   // Connect LiveKit voice room
   useEffect(() => {
-    if (!identity) return;
+    if (!identity || isPractice) return;
     let cancelled = false;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
@@ -603,8 +603,8 @@ function Game() {
           name = prof?.username ?? `P${identity.id.slice(0, 4)}`;
         }
         const { token, url } = identity.isGuest
-          ? await getLiveKitTokenPublic({ data: { roomId, name, identity: identity.id } })
-          : await getLiveKitToken({ data: { roomId, name } });
+          ? await getLiveKitTokenPublic({ data: { roomId: voiceRoomId, name, identity: identity.id } })
+          : await getLiveKitToken({ data: { roomId: voiceRoomId, name } });
         if (cancelled) return;
         await room.connect(url, token);
         if (cancelled) {
@@ -612,6 +612,8 @@ function Game() {
           return;
         }
         await room.localParticipant.setMicrophoneEnabled(false);
+        if (inputId) { try { await room.switchActiveDevice("audioinput", inputId); } catch { /* noop */ } }
+        if (outputId) { try { await room.switchActiveDevice("audiooutput", outputId); } catch { /* noop */ } }
         setMuted(true);
         setVoiceState("connected");
         setVoiceCount(room.numParticipants);
@@ -630,7 +632,57 @@ function Game() {
       room.disconnect().catch(() => {});
       roomRef.current = null;
     };
-  }, [identity, roomId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity, voiceRoomId, isPractice]);
+
+  // Mic level meter + sensitivity gate (voice activation)
+  useEffect(() => {
+    if (voiceState !== "connected" || muted) { setMicLevel(0); return; }
+    let raf = 0;
+    let ctx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let srcTrackId = "";
+    const data = new Uint8Array(1024);
+    let lastLoud = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const room = roomRef.current;
+      const pub = room?.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const track = pub?.track as LocalAudioTrack | undefined;
+      const mst = track?.mediaStreamTrack;
+      if (!track || !mst) return;
+      if (mst.id !== srcTrackId) {
+        srcTrackId = mst.id;
+        try {
+          ctx?.close();
+          const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          ctx = new Ctx();
+          analyser = ctx.createAnalyser();
+          analyser.fftSize = 2048;
+          ctx.createMediaStreamSource(new MediaStream([mst])).connect(analyser);
+        } catch { return; }
+      }
+      if (!analyser) return;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) { const v = (data[i]! - 128) / 128; sum += v * v; }
+      const rms = Math.sqrt(sum / data.length);
+      const level = Math.min(1, rms * 4);
+      setMicLevel(level);
+      const threshold = sensitivityRef.current / 100;
+      const now = performance.now();
+      if (level >= threshold) lastLoud = now;
+      const shouldSpeak = threshold <= 0 || now - lastLoud < 300;
+      if (shouldSpeak && track.isMuted) track.unmute().catch(() => {});
+      else if (!shouldSpeak && !track.isMuted) track.mute().catch(() => {});
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      ctx?.close().catch(() => {});
+      setMicLevel(0);
+    };
+  }, [voiceState, muted]);
 
   async function toggleMute() {
     const room = roomRef.current;
