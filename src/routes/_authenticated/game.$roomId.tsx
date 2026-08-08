@@ -1434,6 +1434,134 @@ function Game() {
           <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
             Zoom: hold the <span className="text-primary">zoom button</span> on mobile, or <span className="text-primary">right-click</span> on PC.
           </p>
+
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="text-xs font-display uppercase tracking-widest text-accent">Graphics</div>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {(["simple", "balanced", "fancy"] as Quality[]).map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuality(q)}
+                  className={`rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest transition-colors ${
+                    quality === q
+                      ? "border-primary bg-primary/25 text-primary shadow-[0_0_12px_var(--primary)]"
+                      : "border-border bg-black/60 text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-pressed={quality === q}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+              {quality === "simple"
+                ? "Lowest resolution, no sky/shadows — best FPS on phones."
+                : quality === "balanced"
+                  ? "Sky and grid on, shadows off."
+                  : "Full resolution, shadows, fog and dense grid."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Voice settings panel */}
+      {voicePanelOpen && (
+        <div className="absolute right-3 top-16 z-40 w-80 max-h-[75vh] overflow-y-auto rounded-md border border-accent/40 bg-black/90 p-4 backdrop-blur">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-display text-sm uppercase tracking-widest text-accent">
+              <Sliders className="size-4" /> Voice chat
+            </h3>
+            <button onClick={() => setVoicePanelOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close voice settings">
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {voiceState === "connected" ? `Connected · ${voiceCount + 1} in channel` : voiceState === "connecting" ? "Connecting…" : voiceState === "error" ? "Voice unavailable" : "Idle"}
+          </div>
+
+          {myTeamKey && (
+            <div className="mt-3">
+              <div className="text-xs font-display uppercase tracking-widest text-accent">Channel</div>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {(["team", "all"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setVoiceScope(s)}
+                    className={`rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${
+                      voiceScope === s ? "border-accent bg-accent/25 text-accent" : "border-border bg-black/60 text-muted-foreground"
+                    }`}
+                  >
+                    {s === "team" ? `Team ${String(myTeamKey).toUpperCase()}` : "Everyone"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <label className="mt-4 block text-xs font-display uppercase tracking-widest text-accent">Microphone</label>
+          <select
+            value={inputId}
+            onChange={(e) => changeInput(e.target.value)}
+            className="mt-1 w-full rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          >
+            <option value="">System default</option>
+            {devices.inputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>{d.label || `Microphone ${d.deviceId.slice(0, 6)}`}</option>
+            ))}
+          </select>
+
+          <label className="mt-3 block text-xs font-display uppercase tracking-widest text-accent">Output / speakers</label>
+          <select
+            value={outputId}
+            onChange={(e) => changeOutput(e.target.value)}
+            className="mt-1 w-full rounded border border-primary/30 bg-black/70 px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          >
+            <option value="">System default</option>
+            {devices.outputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>{d.label || `Output ${d.deviceId.slice(0, 6)}`}</option>
+            ))}
+          </select>
+
+          {devices.inputs.every((d) => !d.label) && (
+            <button
+              onClick={requestMicPermission}
+              className="mt-2 w-full rounded border border-accent/60 bg-accent/15 px-2 py-1.5 text-[10px] font-display uppercase tracking-widest text-accent"
+            >
+              Allow mic access to list devices
+            </button>
+          )}
+
+          <label className="mt-4 block text-xs font-display uppercase tracking-widest text-accent">
+            Mic sensitivity: <span className="text-primary">{sensitivity === 0 ? "Always on" : `${sensitivity}%`}</span>
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={60}
+            step={1}
+            value={sensitivity}
+            onChange={(e) => setSensitivity(Number(e.target.value))}
+            className="mt-2 w-full accent-[var(--accent)]"
+          />
+          <div className="mt-2 h-2 w-full overflow-hidden rounded bg-white/10">
+            <div className="h-full bg-emerald-400 transition-[width] duration-75" style={{ width: `${Math.round(micLevel * 100)}%` }} />
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+            Your mic only transmits when the green bar passes the sensitivity threshold. Set to 0 to always transmit.
+          </p>
+
+          <button
+            onClick={toggleMute}
+            disabled={voiceState !== "connected"}
+            className={`mt-3 flex w-full items-center justify-center gap-2 rounded border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${
+              muted ? "border-destructive/60 text-destructive" : "border-accent/60 bg-accent/20 text-accent"
+            } disabled:opacity-50`}
+          >
+            {muted ? <MicOff className="size-4" /> : <Mic className="size-4" />} {muted ? "Unmute" : "Mute"}
+          </button>
         </div>
       )}
 
