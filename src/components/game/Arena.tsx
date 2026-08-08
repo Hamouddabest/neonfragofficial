@@ -195,6 +195,9 @@ export function ArenaScene({
   speakingIdsRef,
   ctfRef,
   onFlagEvent,
+  quality = "balanced",
+  practice = false,
+  practiceStatsRef,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -215,16 +218,28 @@ export function ArenaScene({
   speakingIdsRef?: React.MutableRefObject<Set<string>>;
   ctfRef?: React.MutableRefObject<CTFState | null>;
   onFlagEvent?: (e: FlagEvent) => void;
+  quality?: Quality;
+  practice?: boolean;
+  practiceStatsRef?: React.MutableRefObject<PracticeStats>;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
+  const targetsRef = useRef<PracticeTarget[]>([]);
+  if (practice && targetsRef.current.length === 0) targetsRef.current = makePracticeTargets();
   return (
     <Canvas shadows camera={{ fov, near: 0.05, far: 300 }}>
-      <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
-      <ambientLight intensity={0.45} />
-      <directionalLight position={[20, 30, 10]} intensity={1.1} castShadow />
-      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} /> : <ArenaWorld />}
+      <QualityController quality={quality} />
+      {quality === "simple" ? (
+        <color attach="background" args={["#0a0716"]} />
+      ) : (
+        <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
+      )}
+      {quality === "fancy" && <fog attach="fog" args={["#0a0716", 40, 140]} />}
+      <ambientLight intensity={quality === "simple" ? 0.9 : 0.45} />
+      <directionalLight position={[20, 30, 10]} intensity={quality === "simple" ? 0.7 : 1.1} castShadow={quality === "fancy"} />
+      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} /> : <ArenaWorld quality={quality} />}
       {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
+      {practice && <PracticeTargets targetsRef={targetsRef} />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} speakingIdsRef={speakingIdsRef} />
       ))}
@@ -248,10 +263,58 @@ export function ArenaScene({
         localOpsRef={localOpsRef}
         ctfRef={ctfRef}
         onFlagEvent={onFlagEvent}
+        targetsRef={practice ? targetsRef : undefined}
+        practiceStatsRef={practiceStatsRef}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
     </Canvas>
+  );
+}
+
+function QualityController({ quality }: { quality: Quality }) {
+  const gl = useThree((s) => s.gl);
+  const setDpr = useThree((s) => s.setDpr);
+  useEffect(() => {
+    const max = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    const dpr = quality === "simple" ? Math.min(0.75, max) : quality === "balanced" ? Math.min(1.25, max) : Math.min(2, max);
+    setDpr(dpr);
+    gl.shadowMap.enabled = quality === "fancy";
+    gl.shadowMap.needsUpdate = true;
+  }, [quality, gl, setDpr]);
+  return null;
+}
+
+function PracticeTargets({ targetsRef }: { targetsRef: React.MutableRefObject<PracticeTarget[]> }) {
+  const group = useRef<THREE.Group>(null);
+  const t = useRef(0);
+  useFrame((_, dt) => {
+    t.current += dt;
+    const g = group.current;
+    if (!g) return;
+    g.children.forEach((child, i) => {
+      const tg = targetsRef.current[i];
+      if (!tg) return;
+      child.visible = tg.alive;
+      child.position.set(tg.x, tg.y + Math.sin(t.current * 1.5 + tg.seed) * 0.5, tg.z);
+      child.rotation.y = t.current * 1.2 + tg.seed;
+    });
+  });
+  return (
+    <group ref={group}>
+      {targetsRef.current.map((tg) => (
+        <group key={tg.id}>
+          <mesh>
+            <sphereGeometry args={[0.55, 20, 20]} />
+            <meshStandardMaterial color="#f43f5e" emissive="#f43f5e" emissiveIntensity={1.2} toneMapped={false} />
+          </mesh>
+          <mesh rotation={[0, 0, 0]}>
+            <torusGeometry args={[0.85, 0.06, 8, 32]} />
+            <meshBasicMaterial color="#22d3ee" toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
   );
 }
 
