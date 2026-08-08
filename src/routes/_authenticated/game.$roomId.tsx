@@ -813,6 +813,70 @@ function Game() {
     };
   }, [platform]);
 
+  // Console controls: PS5 / Xbox gamepad via the Gamepad API
+  useEffect(() => {
+    const onConnect = () => setPadConnected(true);
+    const onDisconnect = () => setPadConnected((navigator.getGamepads?.() ?? []).some(Boolean));
+    window.addEventListener("gamepadconnected", onConnect);
+    window.addEventListener("gamepaddisconnected", onDisconnect);
+    if ((navigator.getGamepads?.() ?? []).some(Boolean)) setPadConnected(true);
+    return () => {
+      window.removeEventListener("gamepadconnected", onConnect);
+      window.removeEventListener("gamepaddisconnected", onDisconnect);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (platform !== "console") return;
+    let raf = 0;
+    const prev: Record<number, boolean> = {};
+    const dead = (v: number) => (Math.abs(v) < 0.18 ? 0 : v);
+    const order: WeaponId[] = isCTF ? ["pistol"] : ["rifle", "sniper", "rpg"];
+    let weaponIdx = 0;
+    const pressed = (gp: Gamepad, i: number) => !!gp.buttons[i]?.pressed;
+    const tap = (gp: Gamepad, i: number) => {
+      const now = pressed(gp, i);
+      const was = prev[i] ?? false;
+      prev[i] = now;
+      return now && !was;
+    };
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const gp = (navigator.getGamepads?.() ?? []).find(Boolean);
+      if (!gp) return;
+      // Sticks: left = move, right = look
+      controls.current.moveX = dead(gp.axes[0] ?? 0);
+      controls.current.moveY = -dead(gp.axes[1] ?? 0);
+      const lookX = dead(gp.axes[2] ?? 0);
+      const lookY = dead(gp.axes[3] ?? 0);
+      const sens = 0.045;
+      controls.current.yaw -= lookX * sens;
+      controls.current.pitch -= lookY * sens;
+      controls.current.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, controls.current.pitch));
+      // R2 / RT fire, L2 / LT zoom
+      controls.current.fire = (gp.buttons[7]?.value ?? 0) > 0.4 || pressed(gp, 7);
+      setZoom((gp.buttons[6]?.value ?? 0) > 0.4 || pressed(gp, 6));
+      // X / A jump, Square / X reload
+      if (tap(gp, 0)) triggerJump();
+      if (tap(gp, 2)) triggerReload();
+      // Bumpers cycle weapons
+      if (order.length > 1) {
+        if (tap(gp, 5)) { weaponIdx = (weaponIdx + 1) % order.length; selectWeapon(order[weaponIdx]!); }
+        if (tap(gp, 4)) { weaponIdx = (weaponIdx - 1 + order.length) % order.length; selectWeapon(order[weaponIdx]!); }
+      }
+      // Options / Menu opens chat
+      if (tap(gp, 9)) setChatOpen((v) => !v);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      controls.current.moveX = 0;
+      controls.current.moveY = 0;
+      controls.current.fire = false;
+      setZoom(false);
+    };
+  }, [platform, isCTF]);
+
   // PC controls: pointer lock, WASD, mouse look, click fire, R reload
   useEffect(() => {
     if (platform !== "pc") return;
