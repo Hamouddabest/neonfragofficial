@@ -89,7 +89,7 @@ function PlayLobby() {
     });
 
     channel.subscribe(async (status) => {
-      if (status === "SUBSCRIBED") await channel.track({ name: displayNameRef.current });
+      if (status === "SUBSCRIBED") await channel.track({ name: identity.name });
     });
 
     startMatchRef.current = () => {
