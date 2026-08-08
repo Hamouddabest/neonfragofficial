@@ -291,6 +291,45 @@ function PlayLobby() {
           </div>
         </div>
 
+        <div className="mt-10 rounded-xl border-2 border-emerald-400/60 bg-gradient-to-br from-emerald-400/15 to-primary/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Users className="size-5 text-emerald-300" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Queue up</h2>
+            <span className="ml-auto rounded-full bg-emerald-400 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black">NEW</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pick a mode and get matched with real players. Duos and trios get their own squad voice channel.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(Object.keys(QUEUE_MODES) as QueueMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => openQueue(m)}
+                className="rounded-lg border border-emerald-400/50 bg-emerald-400/10 p-4 text-left hover:bg-emerald-400/20"
+              >
+                <div className="font-display text-sm font-bold uppercase tracking-wider text-emerald-300">{QUEUE_MODES[m].label}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{QUEUE_MODES[m].blurb}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-sky-400/60 bg-gradient-to-br from-sky-400/15 to-accent/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Crosshair className="size-5 text-sky-300" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Free play — aim trainer</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Solo practice range with respawning targets and a live accuracy readout. No opponents, no pressure.
+          </p>
+          <Button
+            onClick={() => navigate({ to: "/game/$roomId", params: { roomId: "PRACTICE" } })}
+            className="mt-5 h-12 w-full bg-sky-400 font-bold uppercase tracking-widest text-black hover:bg-sky-400/90"
+          >
+            Enter free play
+          </Button>
+        </div>
+
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           <div className="rounded-xl border-2 border-accent/60 bg-gradient-to-br from-accent/15 to-primary/10 p-6 backdrop-blur md:col-span-2">
             <div className="flex items-center gap-2">
