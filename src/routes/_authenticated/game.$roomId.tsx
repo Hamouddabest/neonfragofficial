@@ -1079,6 +1079,9 @@ function Game() {
         localOpsRef={localOpsRef}
         ctfRef={isCTF ? ctfRef : undefined}
         onFlagEvent={isCTF ? handleFlagEvent : undefined}
+        quality={quality}
+        practice={isPractice}
+        practiceStatsRef={practiceStatsRef}
       />
 
       {/* HUD */}
