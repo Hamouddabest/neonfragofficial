@@ -1145,6 +1145,15 @@ function Game() {
           </div>
         </div>
 
+        {isPractice && (
+          <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-md bg-black/70 px-4 py-2 text-center font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
+            <div>Targets hit <span className="text-accent">{practiceHud.hits}</span></div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">
+              Accuracy {practiceHud.shots > 0 ? Math.round((practiceHud.hits / practiceHud.shots) * 100) : 0}% · {practiceHud.shots} shots
+            </div>
+          </div>
+        )}
+
         {isCTF && ctfHud && (
           <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-md bg-black/70 px-3 py-2 text-center font-display text-xs uppercase tracking-widest backdrop-blur">
               <div className="flex items-center justify-center gap-3">
