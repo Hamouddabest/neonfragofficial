@@ -1132,6 +1132,7 @@ function Game() {
       const k = e.key.toLowerCase();
       keys[k] = true;
       if (k === "r") triggerReload();
+      if (k === "e" || k === "f") triggerInteract();
       if (k === " " || k === "spacebar") { e.preventDefault(); triggerJump(); }
       if (k === "1") selectWeapon("rifle");
       if (k === "2") selectWeapon("sniper");
