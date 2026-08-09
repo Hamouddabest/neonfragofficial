@@ -141,6 +141,69 @@ function Game() {
     channelRef.current?.send({ type: "broadcast", event: "flag", payload: e });
   }
 
+  // ===== Vehicles =====
+  const carsEnabled = !isPractice;
+  const carsRef = useRef<CarsState | null>(carsEnabled ? makeCars() : null);
+  const [drivingTeam, setDrivingTeam] = useState<Team | null>(null);
+
+  function applyCarEvent(e: CarEvent, local: boolean) {
+    const cars = carsRef.current;
+    if (!cars) return;
+    const car = cars[e.team];
+    if (e.type === "enter") {
+      car.driverId = e.byId;
+    } else if (e.type === "exit") {
+      car.driverId = null;
+      car.x = e.x; car.z = e.z; car.yaw = e.yaw;
+    } else if (e.type === "move") {
+      if (!local) { car.x = e.x; car.z = e.z; car.yaw = e.yaw; }
+    } else if (e.type === "damage") {
+      if (!car.alive) return;
+      car.hp -= e.damage;
+      if (car.hp <= 0) {
+        car.hp = 0;
+        car.alive = false;
+        car.driverId = null;
+        car.respawnAt = Date.now() + CAR_RESPAWN_MS;
+        // blast: everyone near the wreck loses 15–20 HP
+        const d = Math.hypot(localPosRef.current.x - car.x, localPosRef.current.z - car.z);
+        if (d <= CAR_BLAST_RADIUS) {
+          incomingHitRef.current += 15 + Math.floor(Math.random() * 6);
+        }
+        const id = ++feedId.current;
+        setFeed((f) => [...f, { id, msg: `💥 The ${e.team} car exploded!` }].slice(-4));
+        setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 3000);
+        setDrivingTeam((t) => (t === e.team ? null : t));
+      }
+    }
+  }
+
+  function handleCarEvent(e: CarEvent) {
+    applyCarEvent(e, true);
+    channelRef.current?.send({ type: "broadcast", event: "car", payload: e });
+  }
+
+  // Car respawn timer
+  useEffect(() => {
+    if (!carsEnabled) return;
+    const t = window.setInterval(() => {
+      const cars = carsRef.current;
+      if (!cars) return;
+      for (const team of ["red", "blue"] as Team[]) {
+        const car = cars[team];
+        if (!car.alive && Date.now() >= car.respawnAt) {
+          car.alive = true;
+          car.hp = car.maxHp;
+          car.x = CAR_SPAWNS[team].x;
+          car.z = CAR_SPAWNS[team].z;
+          car.yaw = CAR_SPAWNS[team].yaw;
+          car.driverId = null;
+        }
+      }
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [carsEnabled]);
+
   // Player settings (persisted in localStorage)
   const [fov, setFov] = useState<number>(() => {
     if (typeof window === "undefined") return 75;
