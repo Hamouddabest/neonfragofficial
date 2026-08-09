@@ -867,6 +867,14 @@ function Game({
     // ===== Vehicles: enter / exit / drive =====
     const cars = carsRef?.current ?? null;
     if (cars) {
+      // explosion FX when a car is destroyed
+      for (const t of ["red", "blue"] as Team[]) {
+        const car = cars[t];
+        if (!car.alive && prevCarAlive.current[t]) {
+          explosionsRef.current.push({ x: car.x, y: 1, z: car.z, t: now });
+        }
+        prevCarAlive.current[t] = car.alive;
+      }
       // eject if our car died or we died
       const cur = drivingRef.current ? cars[drivingRef.current] : null;
       if (cur && (!cur.alive || cur.driverId !== localId || player.current.hp <= 0)) {
