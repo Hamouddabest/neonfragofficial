@@ -719,6 +719,10 @@ function Game({
   onFlagEvent,
   targetsRef,
   practiceStatsRef,
+  carsRef,
+  onCarEvent,
+  localId = "",
+  onEnterExitCar,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -741,6 +745,10 @@ function Game({
   onFlagEvent?: (e: FlagEvent) => void;
   targetsRef?: React.MutableRefObject<PracticeTarget[]>;
   practiceStatsRef?: React.MutableRefObject<PracticeStats>;
+  carsRef?: React.MutableRefObject<CarsState | null>;
+  onCarEvent?: (e: CarEvent) => void;
+  localId?: string;
+  onEnterExitCar?: (driving: Team | null) => void;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -772,6 +780,9 @@ function Game({
   const remoteGroup = useRef<THREE.Group>(null);
   const reloadEnd = useRef(0);
   const reloadWeapon = useRef<WeaponId>("rifle");
+  const drivingRef = useRef<Team | null>(null);
+  const lastInteract = useRef(false);
+  const lastCarSync = useRef(0);
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
