@@ -1170,13 +1170,15 @@ function Game() {
         quality={quality}
         practice={isPractice}
         practiceStatsRef={practiceStatsRef}
+        carsRef={carsEnabled ? carsRef : undefined}
+        onCarEvent={carsEnabled ? handleCarEvent : undefined}
+        localId={identity?.id ?? ""}
+        onEnterExitCar={setDrivingTeam}
       />
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <Crosshair className="size-6 text-primary opacity-70" strokeWidth={1.5} />
-        </div>
+        <CustomCrosshair cfg={crosshair} />
 
         <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-3">
           <div className="pointer-events-auto flex items-center gap-2">
