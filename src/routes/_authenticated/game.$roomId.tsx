@@ -1107,6 +1107,8 @@ function Game() {
       }
       // Options / Menu opens chat
       if (tap(gp, 9)) setChatOpen((v) => !v);
+      // Y / Triangle enter or exit vehicle
+      if (tap(gp, 3)) triggerInteract();
     };
     raf = requestAnimationFrame(loop);
     return () => {
@@ -1529,7 +1531,7 @@ function Game() {
       {platform === "pc" && document.pointerLockElement !== rootRef.current && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
-            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1/2/3 weapon
+            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · E vehicle · 1/2/3 weapon
           </div>
         </div>
       )}
@@ -1544,7 +1546,7 @@ function Game() {
 
       {/* Platform selection modal */}
       {settingsOpen && (
-        <div className="absolute right-3 top-16 z-40 w-72 rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
+        <div className="absolute right-3 top-16 z-40 w-72 max-h-[78vh] overflow-y-auto rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-display text-sm uppercase tracking-widest text-primary">Settings</h3>
             <button onClick={() => setSettingsOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close settings">
