@@ -1,5 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Sky, Text, Billboard } from "@react-three/drei";
+import { EffectComposer, Bloom, Vignette, SMAA } from "@react-three/postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
@@ -77,6 +78,51 @@ export type LocalOps = {
 };
 
 export type LocalPos = { x: number; y: number; z: number };
+
+// ===== Vehicles =====
+export type Car = {
+  team: Team;
+  x: number;
+  z: number;
+  yaw: number;
+  hp: number;
+  maxHp: number;
+  driverId: string | null;
+  alive: boolean;
+  respawnAt: number;
+};
+export type CarsState = { red: Car; blue: Car };
+export const CAR_SPAWNS: Record<Team, { x: number; z: number; yaw: number }> = {
+  red: { x: 10, z: -16, yaw: 0 },
+  blue: { x: -10, z: 16, yaw: Math.PI },
+};
+export const CAR_MAX_HP = 220;
+export const CAR_BLAST_RADIUS = 7;
+export const CAR_ENTER_RANGE = 3.6;
+export const CAR_RESPAWN_MS = 20000;
+
+export function makeCars(): CarsState {
+  const mk = (team: Team): Car => ({
+    team,
+    x: CAR_SPAWNS[team].x,
+    z: CAR_SPAWNS[team].z,
+    yaw: CAR_SPAWNS[team].yaw,
+    hp: CAR_MAX_HP,
+    maxHp: CAR_MAX_HP,
+    driverId: null,
+    alive: true,
+    respawnAt: 0,
+  });
+  return { red: mk("red"), blue: mk("blue") };
+}
+
+export type CarEvent =
+  | { type: "enter"; team: Team; byId: string }
+  | { type: "exit"; team: Team; byId: string; x: number; z: number; yaw: number }
+  | { type: "move"; team: Team; x: number; z: number; yaw: number; byId: string }
+  | { type: "damage"; team: Team; damage: number; byId: string }
+  | { type: "explode"; team: Team; x: number; z: number; byId: string };
+
 export type WeaponSpec = {
   id: WeaponId;
   name: string;
