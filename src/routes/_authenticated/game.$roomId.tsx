@@ -32,7 +32,7 @@ function Game() {
   const isPractice = roomId === "PRACTICE";
   const mode = isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false });
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
   function selectWeapon(w: WeaponId) {
@@ -43,6 +43,10 @@ function Game() {
   function triggerJump() {
     controls.current.jump = true;
     setTimeout(() => { controls.current.jump = false; }, 80);
+  }
+  function triggerInteract() {
+    controls.current.interact = true;
+    setTimeout(() => { controls.current.interact = false; }, 120);
   }
   const [feed, setFeed] = useState<{ id: number; msg: string }[]>([]);
   const feedId = useRef(0);
