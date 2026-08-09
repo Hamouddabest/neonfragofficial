@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { useIsOwner } from "@/hooks/use-is-owner";
@@ -21,6 +21,7 @@ function generateRoomCode() {
 }
 
 type QueueMode = "solo" | "duos" | "trios" | "ctf";
+const PARTY_MAX = 4;
 const QUEUE_MODES: Record<QueueMode, { label: string; blurb: string; squadSize: number; needed: number }> = {
   solo:  { label: "Solo",  blurb: "Free-for-all, everyone for themselves", squadSize: 1, needed: 2 },
   duos:  { label: "Duos",  blurb: "Teams of 2 · squad voice channel",      squadSize: 2, needed: 4 },
@@ -44,6 +45,76 @@ function PlayLobby() {
   const [isHost, setIsHost] = useState(false);
   const queueChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  // ===== Party =====
+  const [partyCode, setPartyCode] = useState<string | null>(null);
+  const [partyMembers, setPartyMembers] = useState<{ id: string; name: string }[]>([]);
+  const [partyLeader, setPartyLeader] = useState<string | null>(null);
+  const [joinPartyCode, setJoinPartyCode] = useState("");
+  const partyChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const isPartyLeader = !!partyCode && partyLeader === identity?.id;
+  const partyCodeRef = useRef<string | null>(null);
+  partyCodeRef.current = partyCode;
+
+  useEffect(() => {
+    if (!partyCode || !identity) return;
+    const channel = supabase.channel(`party:${partyCode}`, { config: { presence: { key: identity.id } } });
+    partyChannelRef.current = channel;
+
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState() as Record<string, { name?: string; joinedAt?: number }[]>;
+      const rows = Object.entries(state)
+        .map(([id, metas]) => ({ id, name: metas[0]?.name ?? "player", joinedAt: metas[0]?.joinedAt ?? 0 }))
+        .sort((a, b) => a.joinedAt - b.joinedAt || a.id.localeCompare(b.id));
+      setPartyMembers(rows.map(({ id, name }) => ({ id, name })));
+      setPartyLeader(rows[0]?.id ?? null);
+    });
+
+    // Leader queues → whole party queues together
+    channel.on("broadcast", { event: "queue" }, ({ payload }) => {
+      const p = payload as { mode: QueueMode; by: string };
+      if (p.by === identity.id) return;
+      openQueue(p.mode);
+    });
+    channel.on("broadcast", { event: "unqueue" }, ({ payload }) => {
+      if ((payload as { by: string }).by === identity.id) return;
+      setQueueMode(null);
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") await channel.track({ name: identity.name, joinedAt: Date.now() });
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+      partyChannelRef.current = null;
+    };
+  }, [partyCode, identity]);
+
+  function createParty() {
+    if (!identity) return;
+    setPartyCode(generateRoomCode().slice(0, 5));
+    toast.success("Party created — share the code");
+  }
+
+  function joinParty() {
+    const code = joinPartyCode.trim().toUpperCase();
+    if (code.length < 4) return toast.error("Enter a valid party code");
+    setJoinPartyCode("");
+    setPartyCode(code);
+  }
+
+  function leaveParty() {
+    setPartyCode(null);
+    setPartyMembers([]);
+    setPartyLeader(null);
+  }
+
+  function copyPartyCode() {
+    if (!partyCode) return;
+    void navigator.clipboard?.writeText(partyCode);
+    toast.success("Party code copied");
+  }
+
   const startMatchRef = useRef<(force?: boolean) => void>(() => {});
 
   useEffect(() => {
@@ -63,24 +134,32 @@ function PlayLobby() {
       navigate({ to: "/game/$roomId", params: { roomId } });
     };
 
-    const makeMatch = (ids: string[]) => {
+    const makeMatch = (ids: string[], parties: Record<string, string | null>) => {
       const code = generateRoomCode();
       const roomId = queueMode === "ctf" ? `CTF-${code}` : `${queueMode.toUpperCase()}-${code}`;
       const squads: Record<string, string> = {};
       if (cfg.squadSize > 1) {
-        ids.forEach((id, i) => { squads[id] = String.fromCharCode(65 + Math.floor(i / cfg.squadSize)); });
+        // keep party members adjacent so they land in the same squad + voice channel
+        const ordered = [...ids].sort((a, b) => {
+          const pa = parties[a] ?? `~${a}`;
+          const pb = parties[b] ?? `~${b}`;
+          return pa.localeCompare(pb) || a.localeCompare(b);
+        });
+        ordered.forEach((id, i) => { squads[id] = String.fromCharCode(65 + Math.floor(i / cfg.squadSize)); });
       }
       channel.send({ type: "broadcast", event: "match", payload: { roomId, squads } });
       launch(roomId, squads);
     };
 
     channel.on("presence", { event: "sync" }, () => {
-      const state = channel.presenceState() as Record<string, { name?: string }[]>;
+      const state = channel.presenceState() as Record<string, { name?: string; party?: string | null }[]>;
       const ids = Object.keys(state).sort();
+      const parties: Record<string, string | null> = {};
+      for (const id of ids) parties[id] = state[id]?.[0]?.party ?? null;
       setQueuePlayers(ids);
       const host = ids[0] === identity.id;
       setIsHost(host);
-      if (host && ids.length >= cfg.needed) makeMatch(ids);
+      if (host && ids.length >= cfg.needed) makeMatch(ids, parties);
     });
 
     channel.on("broadcast", { event: "match" }, ({ payload }) => {
@@ -89,12 +168,15 @@ function PlayLobby() {
     });
 
     channel.subscribe(async (status) => {
-      if (status === "SUBSCRIBED") await channel.track({ name: identity.name });
+      if (status === "SUBSCRIBED") await channel.track({ name: identity.name, party: partyCodeRef.current });
     });
 
     startMatchRef.current = () => {
-      const state = channel.presenceState() as Record<string, unknown>;
-      makeMatch(Object.keys(state).sort());
+      const state = channel.presenceState() as Record<string, { party?: string | null }[]>;
+      const ids = Object.keys(state).sort();
+      const parties: Record<string, string | null> = {};
+      for (const id of ids) parties[id] = state[id]?.[0]?.party ?? null;
+      makeMatch(ids, parties);
     };
 
     const timer = window.setInterval(() => setQueueSeconds((s) => s + 1), 1000);
@@ -109,6 +191,23 @@ function PlayLobby() {
     setQueueSeconds(0);
     setQueuePlayers([]);
     setQueueMode(mode);
+  }
+
+  function queueUp(mode: QueueMode) {
+    if (partyCode && isPartyLeader) {
+      partyChannelRef.current?.send({ type: "broadcast", event: "queue", payload: { mode, by: identity?.id } });
+    } else if (partyCode && !isPartyLeader) {
+      toast.error("Only the party leader can start a queue");
+      return;
+    }
+    openQueue(mode);
+  }
+
+  function cancelQueue() {
+    if (partyCode && isPartyLeader) {
+      partyChannelRef.current?.send({ type: "broadcast", event: "unqueue", payload: { by: identity?.id } });
+    }
+    setQueueMode(null);
   }
 
   const { data: officialMaps } = useQuery({
