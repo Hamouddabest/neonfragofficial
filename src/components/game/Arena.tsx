@@ -783,6 +783,7 @@ function Game({
   const drivingRef = useRef<Team | null>(null);
   const lastInteract = useRef(false);
   const lastCarSync = useRef(0);
+  const prevCarAlive = useRef<Record<Team, boolean>>({ red: true, blue: true });
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
