@@ -222,6 +222,21 @@ function Game() {
   });
   useEffect(() => { try { window.localStorage.setItem("neonfrag.quality", quality); } catch { /* noop */ } }, [quality]);
 
+  // ===== Crosshair customization =====
+  type CrosshairCfg = { size: number; gap: number; thickness: number; color: string; dot: boolean; outline: boolean };
+  const CROSSHAIR_DEFAULT: CrosshairCfg = { size: 10, gap: 4, thickness: 2, color: "#22d3ee", dot: true, outline: true };
+  const [crosshair, setCrosshair] = useState<CrosshairCfg>(() => {
+    if (typeof window === "undefined") return CROSSHAIR_DEFAULT;
+    try {
+      const raw = window.localStorage.getItem("neonfrag.crosshair");
+      return raw ? { ...CROSSHAIR_DEFAULT, ...(JSON.parse(raw) as Partial<CrosshairCfg>) } : CROSSHAIR_DEFAULT;
+    } catch { return CROSSHAIR_DEFAULT; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("neonfrag.crosshair", JSON.stringify(crosshair)); } catch { /* noop */ }
+  }, [crosshair]);
+  const CROSSHAIR_COLORS = ["#22d3ee", "#4ade80", "#f43f5e", "#facc15", "#ffffff", "#a78bfa", "#f97316"];
+
   // ===== Voice settings =====
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
   const [devices, setDevices] = useState<{ inputs: MediaDeviceInfo[]; outputs: MediaDeviceInfo[] }>({ inputs: [], outputs: [] });
