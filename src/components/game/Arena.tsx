@@ -671,7 +671,7 @@ function ArenaWorld({ quality = "balanced" }: { quality?: Quality }) {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ARENA * 2, ARENA * 2]} />
-        <meshStandardMaterial color="#1a1530" />
+        <meshStandardMaterial color="#1a1530" metalness={quality === "fancy" ? 0.6 : 0} roughness={quality === "fancy" ? 0.28 : 1} envMapIntensity={1.2} />
       </mesh>
       {/* grid lines */}
       {quality !== "simple" && <gridHelper args={[ARENA * 2, quality === "fancy" ? 40 : 20, "#22d3ee", "#3b1d6b"]} position={[0, 0.01, 0]} />}
