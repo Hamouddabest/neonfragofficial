@@ -1539,7 +1539,18 @@ function Game() {
       {platform === "console" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary backdrop-blur">
-            {padConnected ? "Controller connected" : "Press any button on your controller"} · Left stick move · Right stick aim · RT fire · LT zoom · A/✕ jump · X/□ reload · Bumpers swap weapon · Menu chat
+            {padConnected ? "Controller connected" : "Press any button on your controller"} · Left stick move · Right stick aim · RT fire · LT zoom · A/✕ jump · X/□ reload · Y/△ vehicle · Bumpers swap weapon · Menu chat
+          </div>
+        </div>
+      )}
+
+      {carsEnabled && drivingTeam && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 text-center">
+          <div
+            className="inline-flex items-center gap-2 rounded-md bg-black/75 px-4 py-2 font-display text-[10px] uppercase tracking-widest backdrop-blur"
+            style={{ color: TEAM_COLORS[drivingTeam] }}
+          >
+            <CarIcon className="size-4" /> Driving the {drivingTeam} car · {platform === "pc" ? "E" : platform === "console" ? "Y/△" : "car button"} to get out
           </div>
         </div>
       )}
