@@ -1607,6 +1607,78 @@ function Game() {
                   : "Full resolution, shadows, fog and dense grid."}
             </p>
           </div>
+
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-display uppercase tracking-widest text-accent">Crosshair</div>
+              <button
+                type="button"
+                onClick={() => setCrosshair(CROSSHAIR_DEFAULT)}
+                className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary"
+              >
+                Reset
+              </button>
+            </div>
+
+            <div className="mt-3 grid h-14 place-items-center rounded-md border border-border bg-black/60">
+              <div className="relative size-10">
+                <CustomCrosshair cfg={crosshair} />
+              </div>
+            </div>
+
+            <label className="mt-3 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Length · {crosshair.size}px
+              <input type="range" min={2} max={24} value={crosshair.size}
+                onChange={(e) => setCrosshair((c) => ({ ...c, size: Number(e.target.value) }))}
+                className="mt-1 w-full accent-[var(--primary)]" />
+            </label>
+            <label className="mt-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Spread · {crosshair.gap}px
+              <input type="range" min={0} max={24} value={crosshair.gap}
+                onChange={(e) => setCrosshair((c) => ({ ...c, gap: Number(e.target.value) }))}
+                className="mt-1 w-full accent-[var(--primary)]" />
+            </label>
+            <label className="mt-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Thickness · {crosshair.thickness}px
+              <input type="range" min={1} max={8} value={crosshair.thickness}
+                onChange={(e) => setCrosshair((c) => ({ ...c, thickness: Number(e.target.value) }))}
+                className="mt-1 w-full accent-[var(--primary)]" />
+            </label>
+
+            <div className="mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">Color</div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {CROSSHAIR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCrosshair((cc) => ({ ...cc, color: c }))}
+                  aria-label={`Crosshair color ${c}`}
+                  aria-pressed={crosshair.color === c}
+                  className={`size-6 rounded-full border-2 ${crosshair.color === c ? "border-primary" : "border-transparent"}`}
+                  style={{ background: c }}
+                />
+              ))}
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCrosshair((c) => ({ ...c, dot: !c.dot }))}
+                aria-pressed={crosshair.dot}
+                className={`flex-1 rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${crosshair.dot ? "border-primary bg-primary/25 text-primary" : "border-border bg-black/60 text-muted-foreground"}`}
+              >
+                Center dot
+              </button>
+              <button
+                type="button"
+                onClick={() => setCrosshair((c) => ({ ...c, outline: !c.outline }))}
+                aria-pressed={crosshair.outline}
+                className={`flex-1 rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${crosshair.outline ? "border-primary bg-primary/25 text-primary" : "border-border bg-black/60 text-muted-foreground"}`}
+              >
+                Outline
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
