@@ -1134,6 +1134,25 @@ function Game({
       } else if (best) {
         hits.push({ id: best.id, damage: spec.damage });
       }
+
+      // Vehicles take fire too
+      if (cars) {
+        for (const t of ["red", "blue"] as Team[]) {
+          const car = cars[t];
+          if (!car.alive) continue;
+          if (drivingRef.current === t) continue; // can't shoot your own ride
+          const center = new THREE.Vector3(car.x, 0.9, car.z);
+          const inSphere = ray.ray.intersectSphere(new THREE.Sphere(center, 1.9), new THREE.Vector3());
+          const splashHit = spec.splashRadius > 0 && impact
+            ? center.distanceTo(new THREE.Vector3(impact.x, impact.y, impact.z)) <= spec.splashRadius + 1.5
+            : false;
+          if (inSphere || splashHit) {
+            const dmg = spec.splashRadius > 0 ? spec.damage * 1.6 : spec.damage;
+            onCarEvent?.({ type: "damage", team: t, damage: Math.round(dmg), byId: localId });
+          }
+        }
+      }
+
       onShoot(
         {
           ox: origin.x, oy: origin.y, oz: origin.z,
