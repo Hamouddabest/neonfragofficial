@@ -10,6 +10,44 @@ import { Room, RoomEvent, Track, RemoteAudioTrack, type LocalAudioTrack, type Re
 import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
 const OWNER_EMAIL = "totallybro541@gmail.com";
+
+type CrosshairCfg = { size: number; gap: number; thickness: number; color: string; dot: boolean; outline: boolean };
+const CROSSHAIR_DEFAULT: CrosshairCfg = { size: 10, gap: 4, thickness: 2, color: "#22d3ee", dot: true, outline: true };
+const CROSSHAIR_COLORS = ["#22d3ee", "#4ade80", "#f43f5e", "#facc15", "#ffffff", "#a78bfa", "#f97316"];
+
+function CustomCrosshair({ cfg }: { cfg: CrosshairCfg }) {
+  const shadow = cfg.outline ? "0 0 0 1px rgba(0,0,0,0.9), 0 0 6px currentColor" : "0 0 6px currentColor";
+  const arm = (style: React.CSSProperties) => (
+    <span
+      style={{
+        position: "absolute",
+        background: cfg.color,
+        color: cfg.color,
+        boxShadow: shadow,
+        borderRadius: 1,
+        ...style,
+      }}
+    />
+  );
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+      <div style={{ position: "relative", width: 1, height: 1 }}>
+        {arm({ width: cfg.thickness, height: cfg.size, left: -cfg.thickness / 2, top: -(cfg.gap + cfg.size) })}
+        {arm({ width: cfg.thickness, height: cfg.size, left: -cfg.thickness / 2, top: cfg.gap })}
+        {arm({ width: cfg.size, height: cfg.thickness, top: -cfg.thickness / 2, left: -(cfg.gap + cfg.size) })}
+        {arm({ width: cfg.size, height: cfg.thickness, top: -cfg.thickness / 2, left: cfg.gap })}
+        {cfg.dot &&
+          arm({
+            width: cfg.thickness,
+            height: cfg.thickness,
+            left: -cfg.thickness / 2,
+            top: -cfg.thickness / 2,
+            borderRadius: "50%",
+          })}
+      </div>
+    </div>
+  );
+}
 const PROXIMITY_MAX = 22; // full silence beyond this distance
 const PROXIMITY_NEAR = 2; // full volume within this distance
 
