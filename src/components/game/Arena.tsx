@@ -245,6 +245,10 @@ export function ArenaScene({
   quality = "balanced",
   practice = false,
   practiceStatsRef,
+  carsRef,
+  onCarEvent,
+  localId = "",
+  onEnterExitCar,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -268,24 +272,54 @@ export function ArenaScene({
   quality?: Quality;
   practice?: boolean;
   practiceStatsRef?: React.MutableRefObject<PracticeStats>;
+  carsRef?: React.MutableRefObject<CarsState | null>;
+  onCarEvent?: (e: CarEvent) => void;
+  localId?: string;
+  onEnterExitCar?: (driving: Team | null) => void;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
   const targetsRef = useRef<PracticeTarget[]>([]);
   if (practice && targetsRef.current.length === 0) targetsRef.current = makePracticeTargets();
   return (
-    <Canvas shadows camera={{ fov, near: 0.05, far: 300 }}>
+    <Canvas
+      shadows={quality === "fancy" ? "soft" : false}
+      camera={{ fov, near: 0.05, far: 300 }}
+      gl={{ antialias: quality !== "simple", powerPreference: "high-performance" }}
+    >
       <QualityController quality={quality} />
       {quality === "simple" ? (
         <color attach="background" args={["#0a0716"]} />
       ) : (
-        <Sky sunPosition={[100, 20, 100]} turbidity={6} rayleigh={2} />
+        <Sky
+          sunPosition={quality === "fancy" ? [60, 18, -90] : [100, 20, 100]}
+          turbidity={quality === "fancy" ? 9 : 6}
+          rayleigh={quality === "fancy" ? 3.2 : 2}
+          mieCoefficient={0.008}
+          mieDirectionalG={0.86}
+        />
       )}
-      {quality === "fancy" && <fog attach="fog" args={["#0a0716", 40, 140]} />}
-      <ambientLight intensity={quality === "simple" ? 0.9 : 0.45} />
-      <directionalLight position={[20, 30, 10]} intensity={quality === "simple" ? 0.7 : 1.1} castShadow={quality === "fancy"} />
+      {quality === "fancy" && <fogExp2 attach="fog" args={["#1b1436", 0.011]} />}
+      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.22 : 0.45} />
+      {quality === "fancy" && <hemisphereLight args={["#8ab4ff", "#2a1f4a", 0.55]} />}
+      <directionalLight
+        position={quality === "fancy" ? [34, 46, -28] : [20, 30, 10]}
+        color={quality === "fancy" ? "#ffe3b0" : "#ffffff"}
+        intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 2.6 : 1.1}
+        castShadow={quality === "fancy"}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-bias={-0.0006}
+        shadow-normalBias={0.03}
+        shadow-camera-left={-45}
+        shadow-camera-right={45}
+        shadow-camera-top={45}
+        shadow-camera-bottom={-45}
+        shadow-camera-far={140}
+      />
       {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} /> : <ArenaWorld quality={quality} />}
       {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
+      {carsRef && <CarsView carsRef={carsRef} quality={quality} />}
       {practice && <PracticeTargets targetsRef={targetsRef} />}
       {remoteIds.map((id) => (
         <RemotePlayerView key={id} id={id} remotePlayersRef={remotePlayersRef} speakingIdsRef={speakingIdsRef} />
@@ -312,9 +346,20 @@ export function ArenaScene({
         onFlagEvent={onFlagEvent}
         targetsRef={practice ? targetsRef : undefined}
         practiceStatsRef={practiceStatsRef}
+        carsRef={carsRef}
+        onCarEvent={onCarEvent}
+        localId={localId}
+        onEnterExitCar={onEnterExitCar}
       />
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
+      {quality === "fancy" && (
+        <EffectComposer enableNormalPass={false}>
+          <Bloom intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.25} mipmapBlur />
+          <Vignette eskil={false} offset={0.25} darkness={0.75} />
+          <SMAA />
+        </EffectComposer>
+      )}
     </Canvas>
   );
 }
@@ -327,9 +372,89 @@ function QualityController({ quality }: { quality: Quality }) {
     const dpr = quality === "simple" ? Math.min(0.75, max) : quality === "balanced" ? Math.min(1.25, max) : Math.min(2, max);
     setDpr(dpr);
     gl.shadowMap.enabled = quality === "fancy";
+    gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    gl.toneMapping = quality === "fancy" ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+    gl.toneMappingExposure = quality === "fancy" ? 1.05 : 1;
     gl.shadowMap.needsUpdate = true;
   }, [quality, gl, setDpr]);
   return null;
+}
+
+function CarsView({ carsRef, quality }: { carsRef: React.MutableRefObject<CarsState | null>; quality: Quality }) {
+  return (
+    <group>
+      <CarMesh team="red" carsRef={carsRef} quality={quality} />
+      <CarMesh team="blue" carsRef={carsRef} quality={quality} />
+    </group>
+  );
+}
+
+function CarMesh({ team, carsRef, quality }: { team: Team; carsRef: React.MutableRefObject<CarsState | null>; quality: Quality }) {
+  const ref = useRef<THREE.Group>(null);
+  const bar = useRef<THREE.Mesh>(null);
+  const [hpPct, setHpPct] = useState(1);
+  const color = TEAM_COLORS[team];
+  useFrame(() => {
+    const cars = carsRef.current;
+    const g = ref.current;
+    if (!cars || !g) return;
+    const car = cars[team];
+    g.visible = car.alive;
+    g.position.set(car.x, 0, car.z);
+    g.rotation.y = car.yaw;
+    const pct = Math.max(0, car.hp / car.maxHp);
+    if (Math.abs(pct - hpPct) > 0.02) setHpPct(pct);
+    if (bar.current) bar.current.scale.x = Math.max(0.001, pct);
+  });
+  return (
+    <group ref={ref}>
+      {/* chassis */}
+      <mesh position={[0, 0.65, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.9, 0.7, 3.4]} />
+        <meshStandardMaterial color="#141024" emissive={color} emissiveIntensity={0.35} metalness={0.85} roughness={0.25} />
+      </mesh>
+      {/* cabin */}
+      <mesh position={[0, 1.2, -0.2]} castShadow>
+        <boxGeometry args={[1.5, 0.6, 1.5]} />
+        <meshStandardMaterial color="#0b1020" emissive="#22d3ee" emissiveIntensity={0.5} metalness={0.9} roughness={0.1} />
+      </mesh>
+      {/* headlights */}
+      {[-0.55, 0.55].map((x) => (
+        <mesh key={x} position={[x, 0.7, -1.72]}>
+          <boxGeometry args={[0.4, 0.16, 0.06]} />
+          <meshBasicMaterial color="#fef9c3" toneMapped={false} />
+        </mesh>
+      ))}
+      <spotLight position={[0, 0.9, -1.8]} target-position={[0, 0, -12]} angle={0.6} penumbra={0.5} color="#fff2c4" intensity={quality === "simple" ? 0 : 12} distance={30} castShadow={false} />
+      {/* wheels */}
+      {([[-1, 1.1], [1, 1.1], [-1, -1.1], [1, -1.1]] as [number, number][]).map(([x, z], i) => (
+        <mesh key={i} position={[x, 0.42, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.42, 0.42, 0.28, 16]} />
+          <meshStandardMaterial color="#0a0a12" roughness={0.9} metalness={0.1} />
+        </mesh>
+      ))}
+      {/* team stripe */}
+      <mesh position={[0, 1.02, 0]}>
+        <boxGeometry args={[1.95, 0.06, 3.42]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <Billboard position={[0, 2.3, 0]}>
+        <mesh position={[0, 0, 0]} renderOrder={999}>
+          <planeGeometry args={[1.6, 0.14]} />
+          <meshBasicMaterial color="#111827" transparent opacity={0.85} depthTest={false} toneMapped={false} />
+        </mesh>
+        <group position={[-0.8, 0, 0.001]}>
+          <mesh ref={bar} position={[0.8, 0, 0]} renderOrder={1000}>
+            <planeGeometry args={[1.56, 0.1]} />
+            <meshBasicMaterial color={hpPct > 0.4 ? color : "#f97316"} depthTest={false} toneMapped={false} />
+          </mesh>
+        </group>
+        <Text position={[0, 0.28, 0]} fontSize={0.22} color={color} outlineWidth={0.03} outlineColor="#000" anchorX="center" anchorY="middle" renderOrder={999} material-depthTest={false} material-toneMapped={false}>
+          {`${team.toUpperCase()} CAR`}
+        </Text>
+      </Billboard>
+    </group>
+  );
 }
 
 function PracticeTargets({ targetsRef }: { targetsRef: React.MutableRefObject<PracticeTarget[]> }) {
