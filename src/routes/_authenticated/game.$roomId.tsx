@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, WEAPONS, makeCTFState, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { ChevronUp, Crosshair, Crosshair as CrosshairIcon, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, type CarsState, type CarEvent, WEAPONS, makeCTFState, makeCars, CAR_SPAWNS, CAR_BLAST_RADIUS, CAR_RESPAWN_MS, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
+import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Target, Rocket, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -10,6 +10,44 @@ import { Room, RoomEvent, Track, RemoteAudioTrack, type LocalAudioTrack, type Re
 import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
 const OWNER_EMAIL = "totallybro541@gmail.com";
+
+type CrosshairCfg = { size: number; gap: number; thickness: number; color: string; dot: boolean; outline: boolean };
+const CROSSHAIR_DEFAULT: CrosshairCfg = { size: 10, gap: 4, thickness: 2, color: "#22d3ee", dot: true, outline: true };
+const CROSSHAIR_COLORS = ["#22d3ee", "#4ade80", "#f43f5e", "#facc15", "#ffffff", "#a78bfa", "#f97316"];
+
+function CustomCrosshair({ cfg }: { cfg: CrosshairCfg }) {
+  const shadow = cfg.outline ? "0 0 0 1px rgba(0,0,0,0.9), 0 0 6px currentColor" : "0 0 6px currentColor";
+  const arm = (style: React.CSSProperties) => (
+    <span
+      style={{
+        position: "absolute",
+        background: cfg.color,
+        color: cfg.color,
+        boxShadow: shadow,
+        borderRadius: 1,
+        ...style,
+      }}
+    />
+  );
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+      <div style={{ position: "relative", width: 1, height: 1 }}>
+        {arm({ width: cfg.thickness, height: cfg.size, left: -cfg.thickness / 2, top: -(cfg.gap + cfg.size) })}
+        {arm({ width: cfg.thickness, height: cfg.size, left: -cfg.thickness / 2, top: cfg.gap })}
+        {arm({ width: cfg.size, height: cfg.thickness, top: -cfg.thickness / 2, left: -(cfg.gap + cfg.size) })}
+        {arm({ width: cfg.size, height: cfg.thickness, top: -cfg.thickness / 2, left: cfg.gap })}
+        {cfg.dot &&
+          arm({
+            width: cfg.thickness,
+            height: cfg.thickness,
+            left: -cfg.thickness / 2,
+            top: -cfg.thickness / 2,
+            borderRadius: "50%",
+          })}
+      </div>
+    </div>
+  );
+}
 const PROXIMITY_MAX = 22; // full silence beyond this distance
 const PROXIMITY_NEAR = 2; // full volume within this distance
 
@@ -32,7 +70,7 @@ function Game() {
   const isPractice = roomId === "PRACTICE";
   const mode = isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
   const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false });
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
   function selectWeapon(w: WeaponId) {
@@ -43,6 +81,10 @@ function Game() {
   function triggerJump() {
     controls.current.jump = true;
     setTimeout(() => { controls.current.jump = false; }, 80);
+  }
+  function triggerInteract() {
+    controls.current.interact = true;
+    setTimeout(() => { controls.current.interact = false; }, 120);
   }
   const [feed, setFeed] = useState<{ id: number; msg: string }[]>([]);
   const feedId = useRef(0);
@@ -137,6 +179,69 @@ function Game() {
     channelRef.current?.send({ type: "broadcast", event: "flag", payload: e });
   }
 
+  // ===== Vehicles =====
+  const carsEnabled = !isPractice;
+  const carsRef = useRef<CarsState | null>(carsEnabled ? makeCars() : null);
+  const [drivingTeam, setDrivingTeam] = useState<Team | null>(null);
+
+  function applyCarEvent(e: CarEvent, local: boolean) {
+    const cars = carsRef.current;
+    if (!cars) return;
+    const car = cars[e.team];
+    if (e.type === "enter") {
+      car.driverId = e.byId;
+    } else if (e.type === "exit") {
+      car.driverId = null;
+      car.x = e.x; car.z = e.z; car.yaw = e.yaw;
+    } else if (e.type === "move") {
+      if (!local) { car.x = e.x; car.z = e.z; car.yaw = e.yaw; }
+    } else if (e.type === "damage") {
+      if (!car.alive) return;
+      car.hp -= e.damage;
+      if (car.hp <= 0) {
+        car.hp = 0;
+        car.alive = false;
+        car.driverId = null;
+        car.respawnAt = Date.now() + CAR_RESPAWN_MS;
+        // blast: everyone near the wreck loses 15–20 HP
+        const d = Math.hypot(localPosRef.current.x - car.x, localPosRef.current.z - car.z);
+        if (d <= CAR_BLAST_RADIUS) {
+          incomingHitRef.current += 15 + Math.floor(Math.random() * 6);
+        }
+        const id = ++feedId.current;
+        setFeed((f) => [...f, { id, msg: `💥 The ${e.team} car exploded!` }].slice(-4));
+        setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 3000);
+        setDrivingTeam((t) => (t === e.team ? null : t));
+      }
+    }
+  }
+
+  function handleCarEvent(e: CarEvent) {
+    applyCarEvent(e, true);
+    channelRef.current?.send({ type: "broadcast", event: "car", payload: e });
+  }
+
+  // Car respawn timer
+  useEffect(() => {
+    if (!carsEnabled) return;
+    const t = window.setInterval(() => {
+      const cars = carsRef.current;
+      if (!cars) return;
+      for (const team of ["red", "blue"] as Team[]) {
+        const car = cars[team];
+        if (!car.alive && Date.now() >= car.respawnAt) {
+          car.alive = true;
+          car.hp = car.maxHp;
+          car.x = CAR_SPAWNS[team].x;
+          car.z = CAR_SPAWNS[team].z;
+          car.yaw = CAR_SPAWNS[team].yaw;
+          car.driverId = null;
+        }
+      }
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [carsEnabled]);
+
   // Player settings (persisted in localStorage)
   const [fov, setFov] = useState<number>(() => {
     if (typeof window === "undefined") return 75;
@@ -154,6 +259,18 @@ function Game() {
     return v === "simple" || v === "fancy" || v === "balanced" ? v : "balanced";
   });
   useEffect(() => { try { window.localStorage.setItem("neonfrag.quality", quality); } catch { /* noop */ } }, [quality]);
+
+  // ===== Crosshair customization =====
+  const [crosshair, setCrosshair] = useState<CrosshairCfg>(() => {
+    if (typeof window === "undefined") return CROSSHAIR_DEFAULT;
+    try {
+      const raw = window.localStorage.getItem("neonfrag.crosshair");
+      return raw ? { ...CROSSHAIR_DEFAULT, ...(JSON.parse(raw) as Partial<CrosshairCfg>) } : CROSSHAIR_DEFAULT;
+    } catch { return CROSSHAIR_DEFAULT; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("neonfrag.crosshair", JSON.stringify(crosshair)); } catch { /* noop */ }
+  }, [crosshair]);
 
   // ===== Voice settings =====
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
@@ -450,6 +567,12 @@ function Game() {
         const p = payload as { name: string; msg: string };
         const id = ++chatId.current;
         setChat((c) => [...c, { id, name: p.name, msg: p.msg }].slice(-30));
+      });
+
+      channel.on("broadcast", { event: "car" }, ({ payload }) => {
+        const e = payload as CarEvent;
+        if (e.byId === identity.id) return;
+        applyCarEvent(e, false);
       });
 
       channel.on("broadcast", { event: "admin" }, ({ payload }) => {
@@ -984,6 +1107,8 @@ function Game() {
       }
       // Options / Menu opens chat
       if (tap(gp, 9)) setChatOpen((v) => !v);
+      // Y / Triangle enter or exit vehicle
+      if (tap(gp, 3)) triggerInteract();
     };
     raf = requestAnimationFrame(loop);
     return () => {
@@ -1009,6 +1134,7 @@ function Game() {
       const k = e.key.toLowerCase();
       keys[k] = true;
       if (k === "r") triggerReload();
+      if (k === "e" || k === "f") triggerInteract();
       if (k === " " || k === "spacebar") { e.preventDefault(); triggerJump(); }
       if (k === "1") selectWeapon("rifle");
       if (k === "2") selectWeapon("sniper");
@@ -1082,13 +1208,15 @@ function Game() {
         quality={quality}
         practice={isPractice}
         practiceStatsRef={practiceStatsRef}
+        carsRef={carsEnabled ? carsRef : undefined}
+        onCarEvent={carsEnabled ? handleCarEvent : undefined}
+        localId={identity?.id ?? ""}
+        onEnterExitCar={setDrivingTeam}
       />
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <Crosshair className="size-6 text-primary opacity-70" strokeWidth={1.5} />
-        </div>
+        <CustomCrosshair cfg={crosshair} />
 
         <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-3">
           <div className="pointer-events-auto flex items-center gap-2">
@@ -1355,7 +1483,7 @@ function Game() {
             onTouchEnd={(e) => { e.preventDefault(); controls.current.fire = false; }}
             className="absolute right-6 bottom-28 grid size-24 place-items-center rounded-full border-2 border-accent bg-accent/30 text-accent backdrop-blur active:bg-accent/60"
           >
-            <Crosshair className="size-10" />
+            <CrosshairIcon className="size-10" />
           </button>
 
           {/* Reload button */}
@@ -1386,13 +1514,24 @@ function Game() {
           >
             <Search className="size-6" />
           </button>
+
+          {/* Enter / exit vehicle */}
+          {carsEnabled && (
+            <button
+              onTouchStart={(e) => { e.preventDefault(); triggerInteract(); }}
+              className={`absolute left-6 bottom-56 grid size-14 place-items-center rounded-full border-2 backdrop-blur ${drivingTeam ? "border-accent bg-accent/30 text-accent" : "border-primary/60 bg-black/50 text-primary"}`}
+              aria-label={drivingTeam ? "Exit vehicle" : "Enter vehicle"}
+            >
+              <CarIcon className="size-7" />
+            </button>
+          )}
         </>
       )}
 
       {platform === "pc" && document.pointerLockElement !== rootRef.current && (
         <div className="pointer-events-none absolute inset-x-0 top-1/3 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-xs uppercase tracking-widest text-primary backdrop-blur">
-            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · 1/2/3 weapon
+            Click to play · WASD · Space jump · Mouse aim · Click fire · R reload · E vehicle · 1/2/3 weapon
           </div>
         </div>
       )}
@@ -1400,14 +1539,25 @@ function Game() {
       {platform === "console" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center">
           <div className="inline-block rounded-md bg-black/70 px-4 py-2 font-display text-[10px] uppercase tracking-widest text-primary backdrop-blur">
-            {padConnected ? "Controller connected" : "Press any button on your controller"} · Left stick move · Right stick aim · RT fire · LT zoom · A/✕ jump · X/□ reload · Bumpers swap weapon · Menu chat
+            {padConnected ? "Controller connected" : "Press any button on your controller"} · Left stick move · Right stick aim · RT fire · LT zoom · A/✕ jump · X/□ reload · Y/△ vehicle · Bumpers swap weapon · Menu chat
+          </div>
+        </div>
+      )}
+
+      {carsEnabled && drivingTeam && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 text-center">
+          <div
+            className="inline-flex items-center gap-2 rounded-md bg-black/75 px-4 py-2 font-display text-[10px] uppercase tracking-widest backdrop-blur"
+            style={{ color: TEAM_COLORS[drivingTeam] }}
+          >
+            <CarIcon className="size-4" /> Driving the {drivingTeam} car · {platform === "pc" ? "E" : platform === "console" ? "Y/△" : "car button"} to get out
           </div>
         </div>
       )}
 
       {/* Platform selection modal */}
       {settingsOpen && (
-        <div className="absolute right-3 top-16 z-40 w-72 rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
+        <div className="absolute right-3 top-16 z-40 w-72 max-h-[78vh] overflow-y-auto rounded-md border border-primary/40 bg-black/85 p-4 backdrop-blur">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-display text-sm uppercase tracking-widest text-primary">Settings</h3>
             <button onClick={() => setSettingsOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close settings">
@@ -1470,6 +1620,78 @@ function Game() {
                   ? "Sky and grid on, shadows off."
                   : "Full resolution, shadows, fog and dense grid."}
             </p>
+          </div>
+
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-display uppercase tracking-widest text-accent">Crosshair</div>
+              <button
+                type="button"
+                onClick={() => setCrosshair(CROSSHAIR_DEFAULT)}
+                className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary"
+              >
+                Reset
+              </button>
+            </div>
+
+            <div className="mt-3 grid h-14 place-items-center rounded-md border border-border bg-black/60">
+              <div className="relative size-10">
+                <CustomCrosshair cfg={crosshair} />
+              </div>
+            </div>
+
+            <label className="mt-3 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Length · {crosshair.size}px
+              <input type="range" min={2} max={24} value={crosshair.size}
+                onChange={(e) => setCrosshair((c) => ({ ...c, size: Number(e.target.value) }))}
+                className="mt-1 w-full accent-[var(--primary)]" />
+            </label>
+            <label className="mt-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Spread · {crosshair.gap}px
+              <input type="range" min={0} max={24} value={crosshair.gap}
+                onChange={(e) => setCrosshair((c) => ({ ...c, gap: Number(e.target.value) }))}
+                className="mt-1 w-full accent-[var(--primary)]" />
+            </label>
+            <label className="mt-2 block text-[10px] uppercase tracking-widest text-muted-foreground">
+              Thickness · {crosshair.thickness}px
+              <input type="range" min={1} max={8} value={crosshair.thickness}
+                onChange={(e) => setCrosshair((c) => ({ ...c, thickness: Number(e.target.value) }))}
+                className="mt-1 w-full accent-[var(--primary)]" />
+            </label>
+
+            <div className="mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">Color</div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {CROSSHAIR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCrosshair((cc) => ({ ...cc, color: c }))}
+                  aria-label={`Crosshair color ${c}`}
+                  aria-pressed={crosshair.color === c}
+                  className={`size-6 rounded-full border-2 ${crosshair.color === c ? "border-primary" : "border-transparent"}`}
+                  style={{ background: c }}
+                />
+              ))}
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCrosshair((c) => ({ ...c, dot: !c.dot }))}
+                aria-pressed={crosshair.dot}
+                className={`flex-1 rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${crosshair.dot ? "border-primary bg-primary/25 text-primary" : "border-border bg-black/60 text-muted-foreground"}`}
+              >
+                Center dot
+              </button>
+              <button
+                type="button"
+                onClick={() => setCrosshair((c) => ({ ...c, outline: !c.outline }))}
+                aria-pressed={crosshair.outline}
+                className={`flex-1 rounded-md border px-2 py-2 text-[10px] font-display uppercase tracking-widest ${crosshair.outline ? "border-primary bg-primary/25 text-primary" : "border-border bg-black/60 text-muted-foreground"}`}
+              >
+                Outline
+              </button>
+            </div>
           </div>
         </div>
       )}
