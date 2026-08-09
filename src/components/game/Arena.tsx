@@ -975,6 +975,13 @@ function Game({
       player.current.grounded = false;
     }
 
+    // While driving, the car owns our position
+    if (drivingRef.current && cars) {
+      const car = cars[drivingRef.current];
+      player.current.pos.set(car.x, EYE + 0.75, car.z);
+      player.current.vy = 0;
+    }
+
     camera.position.copy(player.current.pos);
 
     // Apply incoming damage / heal from network
