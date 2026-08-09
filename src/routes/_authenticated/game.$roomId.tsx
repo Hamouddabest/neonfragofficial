@@ -1445,7 +1445,7 @@ function Game() {
             onTouchEnd={(e) => { e.preventDefault(); controls.current.fire = false; }}
             className="absolute right-6 bottom-28 grid size-24 place-items-center rounded-full border-2 border-accent bg-accent/30 text-accent backdrop-blur active:bg-accent/60"
           >
-            <Crosshair className="size-10" />
+            <CrosshairIcon className="size-10" />
           </button>
 
           {/* Reload button */}
@@ -1476,6 +1476,17 @@ function Game() {
           >
             <Search className="size-6" />
           </button>
+
+          {/* Enter / exit vehicle */}
+          {carsEnabled && (
+            <button
+              onTouchStart={(e) => { e.preventDefault(); triggerInteract(); }}
+              className={`absolute left-6 bottom-56 grid size-14 place-items-center rounded-full border-2 backdrop-blur ${drivingTeam ? "border-accent bg-accent/30 text-accent" : "border-primary/60 bg-black/50 text-primary"}`}
+              aria-label={drivingTeam ? "Exit vehicle" : "Enter vehicle"}
+            >
+              <CarIcon className="size-7" />
+            </button>
+          )}
         </>
       )}
 
