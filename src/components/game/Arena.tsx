@@ -161,6 +161,7 @@ export type Controls = {
   jump: boolean;
   weapon: WeaponId;
   zoom: boolean;
+  interact: boolean;
 };
 
 export type RemotePlayer = {
