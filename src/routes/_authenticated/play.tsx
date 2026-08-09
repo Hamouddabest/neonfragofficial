@@ -127,7 +127,7 @@ function PlayLobby() {
     const launch = (roomId: string, squads: Record<string, string>) => {
       if (launched) return;
       launched = true;
-      const mySquad = squads[identity.id];
+      const mySquad = squads[identity.id] ?? (partyCodeRef.current ? `P${partyCodeRef.current}` : undefined);
       if (mySquad) window.sessionStorage.setItem(`neonfrag.squad.${roomId}`, mySquad);
       supabase.removeChannel(channel);
       queueChannelRef.current = null;
