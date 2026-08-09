@@ -863,12 +863,74 @@ function Game({
     const frozen = localOpsRef?.current.frozen ?? false;
     const speed = 6 * boost * opsMult;
     if (frozen) { c.moveX = 0; c.moveY = 0; }
+
+    // ===== Vehicles: enter / exit / drive =====
+    const cars = carsRef?.current ?? null;
+    if (cars) {
+      // eject if our car died or we died
+      const cur = drivingRef.current ? cars[drivingRef.current] : null;
+      if (cur && (!cur.alive || cur.driverId !== localId || player.current.hp <= 0)) {
+        drivingRef.current = null;
+        onEnterExitCar?.(null);
+      }
+      const pressed = c.interact && !lastInteract.current;
+      lastInteract.current = c.interact;
+      if (pressed && player.current.hp > 0) {
+        if (drivingRef.current) {
+          const car = cars[drivingRef.current];
+          car.driverId = null;
+          const ox = car.x + Math.cos(car.yaw) * 2.2;
+          const oz = car.z - Math.sin(car.yaw) * 2.2;
+          player.current.pos.set(ox, EYE + 0.4, oz);
+          player.current.vy = 0;
+          onCarEvent?.({ type: "exit", team: car.team, byId: localId, x: car.x, z: car.z, yaw: car.yaw });
+          drivingRef.current = null;
+          onEnterExitCar?.(null);
+          onKillFeed("You left the vehicle");
+        } else {
+          let pick: Car | null = null;
+          let bd = CAR_ENTER_RANGE;
+          for (const t of ["red", "blue"] as Team[]) {
+            const car = cars[t];
+            if (!car.alive || car.driverId) continue;
+            const d = Math.hypot(player.current.pos.x - car.x, player.current.pos.z - car.z);
+            if (d < bd) { bd = d; pick = car; }
+          }
+          if (pick) {
+            pick.driverId = localId;
+            drivingRef.current = pick.team;
+            onCarEvent?.({ type: "enter", team: pick.team, byId: localId });
+            onEnterExitCar?.(pick.team);
+            onKillFeed(`You hopped into the ${pick.team} car`);
+          }
+        }
+      }
+    }
+
+    if (drivingRef.current && cars) {
+      const car = cars[drivingRef.current];
+      const drive = c.moveY;
+      car.yaw -= c.moveX * 2.0 * dt * (drive < -0.05 ? -1 : 1);
+      const v = drive * 16;
+      car.x += -Math.sin(car.yaw) * v * dt;
+      car.z += -Math.cos(car.yaw) * v * dt;
+      car.x = THREE.MathUtils.clamp(car.x, -ARENA + 2, ARENA - 2);
+      car.z = THREE.MathUtils.clamp(car.z, -ARENA + 2, ARENA - 2);
+      player.current.pos.set(car.x, EYE + 0.75, car.z);
+      player.current.vy = 0;
+      camera.position.copy(player.current.pos);
+      if (now - lastCarSync.current > 66) {
+        lastCarSync.current = now;
+        onCarEvent?.({ type: "move", team: car.team, x: car.x, z: car.z, yaw: car.yaw, byId: localId });
+      }
+    }
+
     const forward = new THREE.Vector3(-Math.sin(c.yaw), 0, -Math.cos(c.yaw));
     const right = new THREE.Vector3(Math.cos(c.yaw), 0, -Math.sin(c.yaw));
     const move = new THREE.Vector3()
       .addScaledVector(forward, c.moveY * speed * dt)
       .addScaledVector(right, c.moveX * speed * dt);
-    player.current.pos.add(move);
+    if (!drivingRef.current) player.current.pos.add(move);
 
     // Owner teleport (consume once)
     if (localOpsRef?.current.teleport) {
