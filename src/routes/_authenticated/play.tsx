@@ -390,7 +390,68 @@ function PlayLobby() {
           </div>
         </div>
 
-        <div className="mt-10 rounded-xl border-2 border-emerald-400/60 bg-gradient-to-br from-emerald-400/15 to-primary/10 p-6 backdrop-blur">
+        <div className="mt-10 rounded-xl border-2 border-fuchsia-400/60 bg-gradient-to-br from-fuchsia-500/15 to-primary/10 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <PartyPopper className="size-5 text-fuchsia-300" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Party</h2>
+            <span className="ml-auto rounded-full bg-fuchsia-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">NEW</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Squad up with up to {PARTY_MAX} friends. The leader queues, everyone drops into the same match with a shared party voice channel.
+          </p>
+
+          {!partyCode ? (
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <Button onClick={createParty} className="h-12 w-full bg-fuchsia-500 font-bold uppercase tracking-widest text-white hover:bg-fuchsia-500/90">
+                Create party
+              </Button>
+              <div className="flex gap-2">
+                <Input
+                  value={joinPartyCode}
+                  onChange={(e) => setJoinPartyCode(e.target.value.toUpperCase())}
+                  placeholder="PARTY CODE"
+                  maxLength={6}
+                  className="font-display tracking-[0.3em] uppercase"
+                />
+                <Button onClick={joinParty} variant="outline" className="h-11">Join</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-md border border-fuchsia-400/50 bg-black/40 px-3 py-2 font-display text-lg tracking-[0.3em] text-fuchsia-300">
+                  {partyCode}
+                </div>
+                <Button onClick={copyPartyCode} variant="outline" size="sm" className="h-10">
+                  <Copy className="mr-2 size-4" /> Copy invite
+                </Button>
+                <Button onClick={leaveParty} variant="ghost" size="sm" className="h-10 text-muted-foreground">
+                  <DoorOpen className="mr-2 size-4" /> Leave party
+                </Button>
+                <span className="ml-auto text-xs text-muted-foreground">{partyMembers.length}/{PARTY_MAX}</span>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {partyMembers.slice(0, PARTY_MAX).map((m) => (
+                  <div key={m.id} className="flex items-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-2">
+                    <UserCircle2 className="size-4 text-fuchsia-300" />
+                    <span className="text-sm">{m.name}</span>
+                    {partyLeader === m.id && (
+                      <span className="ml-auto rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Leader</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {partyMembers.length > PARTY_MAX && (
+                <p className="mt-2 text-xs text-rose-400">Party is over the {PARTY_MAX} player limit — extra members should leave.</p>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                {isPartyLeader ? "You're the leader — pick a queue mode below and the party follows." : "Waiting on the leader to start a queue."}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-emerald-400/60 bg-gradient-to-br from-emerald-400/15 to-primary/10 p-6 backdrop-blur">
           <div className="flex items-center gap-2">
             <Users className="size-5 text-emerald-300" />
             <h2 className="font-display text-lg font-bold uppercase tracking-wider">Queue up</h2>
@@ -403,7 +464,7 @@ function PlayLobby() {
             {(Object.keys(QUEUE_MODES) as QueueMode[]).map((m) => (
               <button
                 key={m}
-                onClick={() => openQueue(m)}
+                onClick={() => queueUp(m)}
                 className="rounded-lg border border-emerald-400/50 bg-emerald-400/10 p-4 text-left hover:bg-emerald-400/20"
               >
                 <div className="font-display text-sm font-bold uppercase tracking-wider text-emerald-300">{QUEUE_MODES[m].label}</div>
@@ -540,7 +601,7 @@ function PlayLobby() {
                   Start now
                 </Button>
               )}
-              <Button variant="outline" className="h-11 flex-1" onClick={() => setQueueMode(null)}>
+              <Button variant="outline" className="h-11 flex-1" onClick={cancelQueue}>
                 Cancel
               </Button>
             </div>
