@@ -534,6 +534,18 @@ function Game() {
         setChat((c) => [...c, { id, name: p.name, msg: p.msg }].slice(-30));
       });
 
+      channel.on("broadcast", { event: "car" }, ({ payload }) => {
+        const e = payload as CarEvent;
+        if (e.byId === identity.id) return;
+        applyCarEvent(e, false);
+      });
+
+      channel.on("broadcast", { event: "chat_unused" }, ({ payload }) => {
+        const p = payload as { name: string; msg: string };
+        const id = ++chatId.current;
+        setChat((c) => [...c, { id, name: p.name, msg: p.msg }].slice(-30));
+      });
+
       channel.on("broadcast", { event: "admin" }, ({ payload }) => {
         const p = payload as {
           action: "heal" | "kill" | "kick" | "announce" | "summon" | "freeze" | "unfreeze";
