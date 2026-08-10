@@ -300,12 +300,12 @@ export function ArenaScene({
         />
       )}
       {quality === "fancy" && <fogExp2 attach="fog" args={["#2b2450", 0.006]} />}
-      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.75 : 0.45} />
-      {quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 1.1]} />}
+      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.38 : 0.45} />
+      {quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 0.6]} />}
       <directionalLight
         position={quality === "fancy" ? [34, 46, -28] : [20, 30, 10]}
         color={quality === "fancy" ? "#ffe3b0" : "#ffffff"}
-        intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 2.2 : 1.1}
+        intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 1.6 : 1.1}
         castShadow={quality === "fancy"}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -355,7 +355,7 @@ export function ArenaScene({
       <Explosions explosionsRef={explosionsRef} />
       {quality === "fancy" && (
         <EffectComposer enableNormalPass={false} multisampling={0}>
-          <Bloom intensity={0.6} luminanceThreshold={0.7} luminanceSmoothing={0.3} mipmapBlur />
+          <Bloom intensity={0.5} luminanceThreshold={0.9} luminanceSmoothing={0.3} mipmapBlur />
           <Vignette eskil={false} offset={0.55} darkness={0.35} />
         </EffectComposer>
       )}
@@ -373,7 +373,7 @@ function QualityController({ quality }: { quality: Quality }) {
     gl.shadowMap.enabled = quality === "fancy";
     gl.shadowMap.type = THREE.PCFSoftShadowMap;
     gl.toneMapping = quality === "fancy" ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-    gl.toneMappingExposure = quality === "fancy" ? 1.05 : 1;
+    gl.toneMappingExposure = quality === "fancy" ? 0.85 : 1;
     gl.shadowMap.needsUpdate = true;
   }, [quality, gl, setDpr]);
   return null;
