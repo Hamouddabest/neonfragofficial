@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./use-auth";
 
 const GUEST_KEY = "neonfrag_guest";
@@ -56,8 +56,18 @@ export function useIdentity(): { identity: Identity | null; loading: boolean } {
     return () => window.removeEventListener("storage", onStorage);
   }, [user]);
 
-  if (loading) return { identity: null, loading: true };
-  if (user) return { identity: { id: user.id, name: "", isGuest: false }, loading: false };
-  if (guest) return { identity: { id: guest.id, name: guest.name, isGuest: true }, loading: false };
-  return { identity: null, loading: false };
+  // Stable object identity: effects elsewhere (realtime channels, voice rooms)
+  // depend on `identity` and must NOT resubscribe on every render.
+  const userId = user?.id ?? null;
+  const guestId = guest?.id ?? null;
+  const guestName = guest?.name ?? null;
+
+  const identity = useMemo<Identity | null>(() => {
+    if (loading) return null;
+    if (userId) return { id: userId, name: "", isGuest: false };
+    if (guestId) return { id: guestId, name: guestName ?? "Guest", isGuest: true };
+    return null;
+  }, [loading, userId, guestId, guestName]);
+
+  return { identity, loading };
 }

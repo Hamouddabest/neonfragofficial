@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Sky, Text, Billboard } from "@react-three/drei";
-import { EffectComposer, Bloom, Vignette, SMAA } from "@react-three/postprocessing";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
@@ -299,13 +299,13 @@ export function ArenaScene({
           mieDirectionalG={0.86}
         />
       )}
-      {quality === "fancy" && <fogExp2 attach="fog" args={["#1b1436", 0.011]} />}
-      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.22 : 0.45} />
-      {quality === "fancy" && <hemisphereLight args={["#8ab4ff", "#2a1f4a", 0.55]} />}
+      {quality === "fancy" && <fogExp2 attach="fog" args={["#2b2450", 0.006]} />}
+      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.38 : 0.45} />
+      {quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 0.6]} />}
       <directionalLight
         position={quality === "fancy" ? [34, 46, -28] : [20, 30, 10]}
         color={quality === "fancy" ? "#ffe3b0" : "#ffffff"}
-        intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 2.6 : 1.1}
+        intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 1.6 : 1.1}
         castShadow={quality === "fancy"}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -354,10 +354,9 @@ export function ArenaScene({
       <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
       <Explosions explosionsRef={explosionsRef} />
       {quality === "fancy" && (
-        <EffectComposer enableNormalPass={false}>
-          <Bloom intensity={0.85} luminanceThreshold={0.55} luminanceSmoothing={0.25} mipmapBlur />
-          <Vignette eskil={false} offset={0.25} darkness={0.75} />
-          <SMAA />
+        <EffectComposer enableNormalPass={false} multisampling={0}>
+          <Bloom intensity={0.5} luminanceThreshold={0.9} luminanceSmoothing={0.3} mipmapBlur />
+          <Vignette eskil={false} offset={0.55} darkness={0.35} />
         </EffectComposer>
       )}
     </Canvas>
@@ -374,7 +373,7 @@ function QualityController({ quality }: { quality: Quality }) {
     gl.shadowMap.enabled = quality === "fancy";
     gl.shadowMap.type = THREE.PCFSoftShadowMap;
     gl.toneMapping = quality === "fancy" ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-    gl.toneMappingExposure = quality === "fancy" ? 1.05 : 1;
+    gl.toneMappingExposure = quality === "fancy" ? 0.85 : 1;
     gl.shadowMap.needsUpdate = true;
   }, [quality, gl, setDpr]);
   return null;
