@@ -5,9 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
+import { GameSettings } from "@/components/game/GameSettings";
 import { useIsOwner } from "@/hooks/use-is-owner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -583,6 +584,17 @@ function PlayLobby() {
             </Button>
           </div>
         )}
+
+        <div className="mt-10 rounded-xl border border-border bg-card/50 p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <SettingsIcon className="size-5 text-primary" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider">Game settings</h2>
+          </div>
+          <p className="mt-1 mb-5 text-sm text-muted-foreground">
+            Set your FOV, graphics and crosshair here — they apply to every match you join.
+          </p>
+          <GameSettings />
+        </div>
       </div>
 
       {queueMode && (
