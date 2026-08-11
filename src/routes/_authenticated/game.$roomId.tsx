@@ -73,6 +73,7 @@ function Game() {
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
+  const [thirdPerson, setThirdPerson] = useState(false);
   function selectWeapon(w: WeaponId) {
     if (isCTF) return; // pistol only
     controls.current.weapon = w;
@@ -1072,7 +1073,7 @@ function Game() {
     let raf = 0;
     const prev: Record<number, boolean> = {};
     const dead = (v: number) => (Math.abs(v) < 0.18 ? 0 : v);
-    const order: WeaponId[] = isCTF ? ["pistol"] : ["rifle", "sniper", "rpg"];
+    const order: WeaponId[] = isCTF ? ["pistol"] : WEAPON_ORDER;
     let weaponIdx = 0;
     const pressed = (gp: Gamepad, i: number) => !!gp.buttons[i]?.pressed;
     const tap = (gp: Gamepad, i: number) => {
@@ -1107,6 +1108,8 @@ function Game() {
       }
       // Options / Menu opens chat
       if (tap(gp, 9)) setChatOpen((v) => !v);
+      // Right stick click toggles third person
+      if (tap(gp, 11)) setThirdPerson((v) => !v);
       // Y / Triangle enter or exit vehicle
       if (tap(gp, 3)) triggerInteract();
     };
@@ -1139,6 +1142,11 @@ function Game() {
       if (k === "1") selectWeapon("rifle");
       if (k === "2") selectWeapon("sniper");
       if (k === "3") selectWeapon("rpg");
+      if (k === "4") selectWeapon("ak47");
+      if (k === "5") selectWeapon("pistol");
+      if (k === "6") selectWeapon("flamethrower");
+      if (k === "7") selectWeapon("portalgun");
+      if (k === "v") setThirdPerson((v) => !v);
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1212,6 +1220,8 @@ function Game() {
         onCarEvent={carsEnabled ? handleCarEvent : undefined}
         localId={identity?.id ?? ""}
         onEnterExitCar={setDrivingTeam}
+        thirdPerson={thirdPerson}
+        weapon={weapon}
       />
 
       {/* HUD */}
@@ -1352,15 +1362,15 @@ function Game() {
 
       {/* Weapon selector */}
       {!isCTF && (
-      <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex gap-1.5">
-        {(["rifle","sniper","rpg"] as WeaponId[]).map((w, i) => {
-          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : Rocket;
+      <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex max-w-[92vw] flex-wrap justify-center gap-1.5">
+        {WEAPON_ORDER.map((w, i) => {
+          const Icon = WEAPON_ICONS[w];
           const active = weapon === w;
           return (
             <button
               key={w}
               onClick={() => selectWeapon(w)}
-              className={`grid size-12 place-items-center rounded-md border backdrop-blur ${
+              className={`grid size-11 place-items-center rounded-md border backdrop-blur ${
                 active
                   ? "border-accent bg-accent/30 text-accent shadow-[0_0_16px_var(--accent)]"
                   : "border-border bg-black/60 text-muted-foreground"
