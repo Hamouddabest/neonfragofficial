@@ -58,6 +58,67 @@ function PlayLobby() {
   const partyCodeRef = useRef<string | null>(null);
   partyCodeRef.current = partyCode;
 
+  // ===== Party voice chat (lobby) =====
+  const partyRoomRef = useRef<Room | null>(null);
+  const [voiceState, setVoiceState] = useState<"off" | "connecting" | "on" | "error">("off");
+  const [micOn, setMicOn] = useState(true);
+  const [speakingIds, setSpeakingIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!partyCode || !identity) {
+      setVoiceState("off");
+      return;
+    }
+    let cancelled = false;
+    const room = new Room({ adaptiveStream: true, dynacast: true });
+    partyRoomRef.current = room;
+    setVoiceState("connecting");
+    const audioEls: HTMLAudioElement[] = [];
+    room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track.kind !== "audio") return;
+      const el = track.attach() as HTMLAudioElement;
+      el.dataset["pid"] = participant.identity;
+      el.style.display = "none";
+      document.body.appendChild(el);
+      audioEls.push(el);
+    });
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      setSpeakingIds(speakers.map((s) => s.identity));
+    });
+    (async () => {
+      try {
+        const args = { roomId: `party-${partyCode}`, name: identity.name };
+        const res = identity.isGuest
+          ? await getLiveKitTokenPublic({ data: { ...args, identity: identity.id } })
+          : await getLiveKitToken({ data: args });
+        if (cancelled) return;
+        await room.connect(res.url, res.token);
+        if (cancelled) return;
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMicOn(true);
+        setVoiceState("on");
+      } catch {
+        if (!cancelled) setVoiceState("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      for (const el of audioEls) el.remove();
+      void room.disconnect();
+      partyRoomRef.current = null;
+      setSpeakingIds([]);
+      setVoiceState("off");
+    };
+  }, [partyCode, identity]);
+
+  async function toggleMic() {
+    const room = partyRoomRef.current;
+    if (!room) return;
+    const next = !micOn;
+    await room.localParticipant.setMicrophoneEnabled(next);
+    setMicOn(next);
+  }
+
   useEffect(() => {
     if (!partyCode || !identity) return;
     const channel = supabase.channel(`party:${partyCode}`, { config: { presence: { key: identity.id } } });
