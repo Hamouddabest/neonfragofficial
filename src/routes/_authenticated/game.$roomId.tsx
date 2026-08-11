@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, type CarsState, type CarEvent, WEAPONS, makeCTFState, makeCars, CAR_SPAWNS, CAR_BLAST_RADIUS, CAR_RESPAWN_MS, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Flame, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Swords, Target, Rocket, Users, Video, Wand2, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -50,6 +50,17 @@ function CustomCrosshair({ cfg }: { cfg: CrosshairCfg }) {
 }
 const PROXIMITY_MAX = 22; // full silence beyond this distance
 const PROXIMITY_NEAR = 2; // full volume within this distance
+
+const WEAPON_ORDER: WeaponId[] = ["rifle", "ak47", "pistol", "sniper", "rpg", "flamethrower", "portalgun"];
+const WEAPON_ICONS: Record<WeaponId, typeof Target> = {
+  rifle: Target,
+  ak47: Swords,
+  pistol: Zap,
+  sniper: CrosshairIcon,
+  rpg: Rocket,
+  flamethrower: Flame,
+  portalgun: Wand2,
+};
 
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
