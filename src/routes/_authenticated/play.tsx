@@ -492,13 +492,24 @@ function PlayLobby() {
                 <Button onClick={leaveParty} variant="ghost" size="sm" className="h-10 text-muted-foreground">
                   <DoorOpen className="mr-2 size-4" /> Leave party
                 </Button>
+                <Button
+                  onClick={() => void toggleMic()}
+                  variant="outline"
+                  size="sm"
+                  disabled={voiceState !== "on"}
+                  className={`h-10 ${micOn && voiceState === "on" ? "border-emerald-400/60 text-emerald-300" : "text-muted-foreground"}`}
+                >
+                  {micOn && voiceState === "on" ? <Mic className="mr-2 size-4" /> : <MicOff className="mr-2 size-4" />}
+                  {voiceState === "connecting" ? "Connecting…" : voiceState === "error" ? "Voice off" : micOn ? "Mic on" : "Muted"}
+                </Button>
                 <span className="ml-auto text-xs text-muted-foreground">{partyMembers.length}/{PARTY_MAX}</span>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {partyMembers.slice(0, PARTY_MAX).map((m) => (
-                  <div key={m.id} className="flex items-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-2">
+                  <div key={m.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${speakingIds.includes(m.id) ? "border-emerald-400 bg-emerald-400/10 shadow-[0_0_12px_rgba(52,211,153,0.5)]" : "border-fuchsia-400/30 bg-fuchsia-400/10"}`}>
                     <UserCircle2 className="size-4 text-fuchsia-300" />
                     <span className="text-sm">{m.name}</span>
+                    {speakingIds.includes(m.id) && <Mic className="size-3.5 animate-pulse text-emerald-300" />}
                     {partyLeader === m.id && (
                       <span className="ml-auto rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Leader</span>
                     )}
