@@ -10,7 +10,7 @@ const PLAYER_RADIUS = 0.4;
 const GRAVITY = 22;
 const JUMP_VELOCITY = 8.5;
 
-export type WeaponId = "rifle" | "sniper" | "rpg" | "pistol";
+export type WeaponId = "rifle" | "sniper" | "rpg" | "pistol" | "ak47" | "flamethrower" | "portalgun";
 export type Rank = "owner" | "admin" | "player";
 export type Team = "red" | "blue";
 export type Quality = "simple" | "balanced" | "fancy";
@@ -90,6 +90,10 @@ export type Car = {
   driverId: string | null;
   alive: boolean;
   respawnAt: number;
+  /** current forward speed (units/s), local only */
+  speed?: number;
+  /** timestamp (ms, Date.now) of last damage — used to flash the HP bar */
+  lastHitAt?: number;
 };
 export type CarsState = { red: Car; blue: Car };
 export const CAR_SPAWNS: Record<Team, { x: number; z: number; yaw: number }> = {
@@ -112,6 +116,8 @@ export function makeCars(): CarsState {
     driverId: null,
     alive: true,
     respawnAt: 0,
+    speed: 0,
+    lastHitAt: 0,
   });
   return { red: mk("red"), blue: mk("blue") };
 }
@@ -133,12 +139,16 @@ export type WeaponSpec = {
   splashRadius: number; // 0 = no splash
   maxRange: number;
   color: string;
+  kind?: "hitscan" | "flame" | "portal";
 };
 export const WEAPONS: Record<WeaponId, WeaponSpec> = {
-  pistol: { id: "pistol", name: "Pistol", cooldownMs: 260, magazine: 12, reloadMs: 1200, damage: 45, splashRadius: 0, maxRange: 60, color: "#facc15" },
+  pistol: { id: "pistol", name: "Handgun", cooldownMs: 260, magazine: 12, reloadMs: 1200, damage: 45, splashRadius: 0, maxRange: 60, color: "#facc15" },
   rifle:  { id: "rifle",  name: "Rifle",  cooldownMs: 180, magazine: 30, reloadMs: 1500, damage: 34, splashRadius: 0, maxRange: 80, color: "#22d3ee" },
+  ak47:   { id: "ak47",   name: "AK-47",  cooldownMs: 105, magazine: 30, reloadMs: 2000, damage: 29, splashRadius: 0, maxRange: 90, color: "#f59e0b" },
   sniper: { id: "sniper", name: "Sniper", cooldownMs: 900, magazine: 5,  reloadMs: 2200, damage: 95, splashRadius: 0, maxRange: 200, color: "#a78bfa" },
   rpg:    { id: "rpg",    name: "RPG",    cooldownMs: 1200,magazine: 3,  reloadMs: 2800, damage: 75, splashRadius: 4.5, maxRange: 60, color: "#f97316" },
+  flamethrower: { id: "flamethrower", name: "Flamethrower", cooldownMs: 70, magazine: 120, reloadMs: 3000, damage: 7, splashRadius: 0, maxRange: 11, color: "#fb923c", kind: "flame" },
+  portalgun:    { id: "portalgun",    name: "Portal Gun",   cooldownMs: 900, magazine: 6, reloadMs: 2000, damage: 0, splashRadius: 0, maxRange: 90, color: "#a855f7", kind: "portal" },
 };
 
 export type GameState = {
@@ -249,6 +259,8 @@ export function ArenaScene({
   onCarEvent,
   localId = "",
   onEnterExitCar,
+  thirdPerson = false,
+  weapon = "rifle",
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -276,6 +288,8 @@ export function ArenaScene({
   onCarEvent?: (e: CarEvent) => void;
   localId?: string;
   onEnterExitCar?: (driving: Team | null) => void;
+  thirdPerson?: boolean;
+  weapon?: WeaponId;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -350,8 +364,10 @@ export function ArenaScene({
         onCarEvent={onCarEvent}
         localId={localId}
         onEnterExitCar={onEnterExitCar}
+        thirdPerson={thirdPerson}
       />
-      <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} />
+      {!thirdPerson && <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} weapon={weapon} />}
+      {thirdPerson && localPosRef && <LocalBodyView localPosRef={localPosRef} controls={controls} />}
       <Explosions explosionsRef={explosionsRef} />
       {quality === "fancy" && (
         <EffectComposer enableNormalPass={false} multisampling={0}>
@@ -391,6 +407,7 @@ function CarsView({ carsRef, quality }: { carsRef: React.MutableRefObject<CarsSt
 function CarMesh({ team, carsRef, quality }: { team: Team; carsRef: React.MutableRefObject<CarsState | null>; quality: Quality }) {
   const ref = useRef<THREE.Group>(null);
   const bar = useRef<THREE.Mesh>(null);
+  const barGroup = useRef<THREE.Group>(null);
   const [hpPct, setHpPct] = useState(1);
   const color = TEAM_COLORS[team];
   useFrame(() => {
@@ -404,6 +421,11 @@ function CarMesh({ team, carsRef, quality }: { team: Team; carsRef: React.Mutabl
     const pct = Math.max(0, car.hp / car.maxHp);
     if (Math.abs(pct - hpPct) > 0.02) setHpPct(pct);
     if (bar.current) bar.current.scale.x = Math.max(0.001, pct);
+    // HP bar only shows for a few seconds after the car takes damage
+    if (barGroup.current) {
+      const since = Date.now() - (car.lastHitAt ?? 0);
+      barGroup.current.visible = (car.lastHitAt ?? 0) > 0 && since < 4000;
+    }
   });
   return (
     <group ref={ref}>
@@ -437,7 +459,7 @@ function CarMesh({ team, carsRef, quality }: { team: Team; carsRef: React.Mutabl
         <boxGeometry args={[1.95, 0.06, 3.42]} />
         <meshBasicMaterial color={color} toneMapped={false} />
       </mesh>
-      <Billboard position={[0, 2.3, 0]}>
+      <Billboard position={[0, 2.3, 0]} ref={barGroup} visible={false}>
         <mesh position={[0, 0, 0]} renderOrder={999}>
           <planeGeometry args={[1.6, 0.14]} />
           <meshBasicMaterial color="#111827" transparent opacity={0.85} depthTest={false} toneMapped={false} />
@@ -548,61 +570,8 @@ function RemotePlayerView({
   });
   return (
     <group ref={ref}>
-      {/* legs */}
-      <group position={[0.18, 0, 0]}>
-        <mesh ref={legR} position={[0, -0.4, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.8, 0.22]} />
-          <meshStandardMaterial color="#1a1530" emissive={color} emissiveIntensity={0.2} />
-        </mesh>
-      </group>
-      <group position={[-0.18, 0, 0]}>
-        <mesh ref={legL} position={[0, -0.4, 0]} castShadow>
-          <boxGeometry args={[0.22, 0.8, 0.22]} />
-          <meshStandardMaterial color="#1a1530" emissive={color} emissiveIntensity={0.2} />
-        </mesh>
-      </group>
-      {/* torso */}
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <boxGeometry args={[0.7, 0.9, 0.4]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} metalness={0.5} roughness={0.3} />
-      </mesh>
-      {/* chest light */}
-      <mesh position={[0, 0.55, 0.21]}>
-        <boxGeometry args={[0.2, 0.06, 0.02]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={3} toneMapped={false} />
-      </mesh>
-      {/* head + visor */}
-      <mesh position={[0, 1.15, 0]} castShadow>
-        <boxGeometry args={[0.45, 0.45, 0.45]} />
-        <meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.2} />
-      </mesh>
-      <mesh position={[0, 1.18, 0.23]}>
-        <boxGeometry args={[0.36, 0.14, 0.02]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={4} toneMapped={false} />
-      </mesh>
-      {/* arms (with shoulder pivots) */}
-      <group position={[0.45, 0.8, 0]}>
-        <mesh ref={armR} position={[0, -0.35, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.75, 0.2]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
-        </mesh>
-        {/* gun in right hand */}
-        <mesh position={[0, -0.6, -0.35]}>
-          <boxGeometry args={[0.14, 0.18, 0.7]} />
-          <meshStandardMaterial color="#0f172a" emissive="#ec4899" emissiveIntensity={0.4} metalness={0.7} roughness={0.3} />
-        </mesh>
-        <mesh position={[0, -0.55, -0.7]}>
-          <boxGeometry args={[0.06, 0.06, 0.2]} />
-          <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={2} toneMapped={false} />
-        </mesh>
-      </group>
-      <group position={[-0.45, 0.8, 0]}>
-        <mesh ref={armL} position={[0, -0.35, 0]} castShadow>
-          <boxGeometry args={[0.2, 0.75, 0.2]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
-        </mesh>
-      </group>
-      <Billboard position={[0, 2, 0]}>
+      <BlockyBody color={color} legL={legL} legR={legR} armL={armL} armR={armR} />
+      <Billboard position={[0, 2.3, 0]}>
         {speaking && (
           <group ref={micRef} position={[rank !== "player" ? -0.85 : -0.6, rank !== "player" ? 0.45 : 0, 0]}>
             <mesh renderOrder={999}>
@@ -649,6 +618,127 @@ function RemotePlayerView({
           {name.toUpperCase()}
         </Text>
       </Billboard>
+    </group>
+  );
+}
+
+/** Minecraft-style blocky character. Origin sits at the feet-ish (y=0 is hip). */
+function BlockyBody({
+  color,
+  legL,
+  legR,
+  armL,
+  armR,
+}: {
+  color: string;
+  legL?: React.RefObject<THREE.Mesh | null>;
+  legR?: React.RefObject<THREE.Mesh | null>;
+  armL?: React.RefObject<THREE.Mesh | null>;
+  armR?: React.RefObject<THREE.Mesh | null>;
+}) {
+  const skin = "#e0ac69";
+  const pants = "#2b3a67";
+  const mat = { metalness: 0.05, roughness: 0.95 };
+  return (
+    <group position={[0, 0.76, 0]}>
+      {/* legs */}
+      <group position={[0.16, 0, 0]}>
+        <mesh ref={legR} position={[0, -0.38, 0]} castShadow>
+          <boxGeometry args={[0.3, 0.76, 0.3]} />
+          <meshStandardMaterial color={pants} {...mat} />
+        </mesh>
+      </group>
+      <group position={[-0.16, 0, 0]}>
+        <mesh ref={legL} position={[0, -0.38, 0]} castShadow>
+          <boxGeometry args={[0.3, 0.76, 0.3]} />
+          <meshStandardMaterial color={pants} {...mat} />
+        </mesh>
+      </group>
+      {/* torso */}
+      <mesh position={[0, 0.38, 0]} castShadow>
+        <boxGeometry args={[0.62, 0.76, 0.32]} />
+        <meshStandardMaterial color={color} {...mat} />
+      </mesh>
+      {/* head */}
+      <mesh position={[0, 1.03, 0]} castShadow>
+        <boxGeometry args={[0.56, 0.56, 0.56]} />
+        <meshStandardMaterial color={skin} {...mat} />
+      </mesh>
+      {/* hair / cap */}
+      <mesh position={[0, 1.28, 0]} castShadow>
+        <boxGeometry args={[0.58, 0.12, 0.58]} />
+        <meshStandardMaterial color="#3b2a1d" {...mat} />
+      </mesh>
+      {/* eyes */}
+      {[-0.14, 0.14].map((x) => (
+        <group key={x}>
+          <mesh position={[x, 1.08, 0.285]}>
+            <boxGeometry args={[0.12, 0.12, 0.01]} />
+            <meshStandardMaterial color="#ffffff" {...mat} />
+          </mesh>
+          <mesh position={[x + (x > 0 ? 0.03 : -0.03), 1.08, 0.292]}>
+            <boxGeometry args={[0.06, 0.12, 0.01]} />
+            <meshStandardMaterial color="#2a1b4a" {...mat} />
+          </mesh>
+        </group>
+      ))}
+      {/* mouth */}
+      <mesh position={[0, 0.93, 0.285]}>
+        <boxGeometry args={[0.18, 0.05, 0.01]} />
+        <meshStandardMaterial color="#7a4b3a" {...mat} />
+      </mesh>
+      {/* arms */}
+      <group position={[0.46, 0.7, 0]}>
+        <mesh ref={armR} position={[0, -0.34, 0]} castShadow>
+          <boxGeometry args={[0.28, 0.72, 0.28]} />
+          <meshStandardMaterial color={color} {...mat} />
+        </mesh>
+        {/* blocky gun in right hand */}
+        <mesh position={[0, -0.62, -0.34]}>
+          <boxGeometry args={[0.14, 0.16, 0.66]} />
+          <meshStandardMaterial color="#26262e" {...mat} />
+        </mesh>
+      </group>
+      <group position={[-0.46, 0.7, 0]}>
+        <mesh ref={armL} position={[0, -0.34, 0]} castShadow>
+          <boxGeometry args={[0.28, 0.72, 0.28]} />
+          <meshStandardMaterial color={color} {...mat} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/** The local player's own body, shown only in third-person view. */
+function LocalBodyView({
+  localPosRef,
+  controls,
+}: {
+  localPosRef: React.MutableRefObject<LocalPos>;
+  controls: React.MutableRefObject<Controls>;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const legL = useRef<THREE.Mesh>(null);
+  const legR = useRef<THREE.Mesh>(null);
+  const armL = useRef<THREE.Mesh>(null);
+  const armR = useRef<THREE.Mesh>(null);
+  const phase = useRef(0);
+  useFrame((_, dt) => {
+    const g = ref.current;
+    if (!g) return;
+    g.position.set(localPosRef.current.x, localPosRef.current.y - EYE, localPosRef.current.z);
+    g.rotation.y = controls.current.yaw;
+    const moving = Math.min(Math.hypot(controls.current.moveX, controls.current.moveY), 1);
+    phase.current += dt * (4 + moving * 8);
+    const swing = Math.sin(phase.current) * 0.6 * moving;
+    if (legL.current) legL.current.rotation.x = swing;
+    if (legR.current) legR.current.rotation.x = -swing;
+    if (armL.current) armL.current.rotation.x = -swing * 0.6;
+    if (armR.current) armR.current.rotation.x = swing * 0.6;
+  });
+  return (
+    <group ref={ref}>
+      <BlockyBody color="#22d3ee" legL={legL} legR={legR} armL={armL} armR={armR} />
     </group>
   );
 }
@@ -722,6 +812,7 @@ function Game({
   onCarEvent,
   localId = "",
   onEnterExitCar,
+  thirdPerson = false,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -748,6 +839,7 @@ function Game({
   onCarEvent?: (e: CarEvent) => void;
   localId?: string;
   onEnterExitCar?: (driving: Team | null) => void;
+  thirdPerson?: boolean;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -769,7 +861,7 @@ function Game({
     hp: 100,
     kills: 0,
     deaths: 0,
-    ammo: { rifle: 30, sniper: 5, rpg: 3, pistol: 12 } as Record<WeaponId, number>,
+    ammo: { rifle: 30, sniper: 5, rpg: 3, pistol: 12, ak47: 30, flamethrower: 120, portalgun: 6 } as Record<WeaponId, number>,
     speedBoostUntil: 0,
     lastPad: 0,
   });
@@ -887,6 +979,7 @@ function Game({
         if (drivingRef.current) {
           const car = cars[drivingRef.current];
           car.driverId = null;
+          car.speed = 0;
           const ox = car.x + Math.cos(car.yaw) * 2.2;
           const oz = car.z - Math.sin(car.yaw) * 2.2;
           player.current.pos.set(ox, EYE + 0.4, oz);
@@ -917,14 +1010,30 @@ function Game({
 
     if (drivingRef.current && cars) {
       const car = cars[drivingRef.current];
-      const drive = c.moveY;
-      car.yaw -= c.moveX * 2.0 * dt * (drive < -0.05 ? -1 : 1);
-      const v = drive * 16;
-      car.x += -Math.sin(car.yaw) * v * dt;
-      car.z += -Math.cos(car.yaw) * v * dt;
+      const throttle = c.moveY;
+      const MAX_FWD = 22, MAX_REV = -9, ACCEL = 26, BRAKE = 34, FRICTION = 9;
+      let v = car.speed ?? 0;
+      if (throttle > 0.05) {
+        v += ACCEL * throttle * dt;
+      } else if (throttle < -0.05) {
+        // brake while moving forward, otherwise reverse
+        v += (v > 0.1 ? -BRAKE : -ACCEL) * Math.abs(throttle) * dt;
+      } else {
+        v -= Math.sign(v) * Math.min(Math.abs(v), FRICTION * dt);
+      }
+      v = THREE.MathUtils.clamp(v, MAX_REV, MAX_FWD);
+      car.speed = v;
+      // Steering scales with speed, and reverses when backing up (like a real car)
+      const steerAuthority = THREE.MathUtils.clamp(Math.abs(v) / 8, 0, 1);
+      car.yaw -= c.moveX * 2.4 * dt * steerAuthority * (v < 0 ? -1 : 1);
+      const nx = car.x + -Math.sin(car.yaw) * v * dt;
+      const nz = car.z + -Math.cos(car.yaw) * v * dt;
+      car.x = nx;
+      car.z = nz;
       car.x = THREE.MathUtils.clamp(car.x, -ARENA + 2, ARENA - 2);
       car.z = THREE.MathUtils.clamp(car.z, -ARENA + 2, ARENA - 2);
-      player.current.pos.set(car.x, EYE + 0.75, car.z);
+      if (Math.abs(car.x) >= ARENA - 2 || Math.abs(car.z) >= ARENA - 2) car.speed = v * 0.3;
+      player.current.pos.set(car.x, EYE + 0.9, car.z);
       player.current.vy = 0;
       camera.position.copy(player.current.pos);
       if (now - lastCarSync.current > 66) {
@@ -986,11 +1095,23 @@ function Game({
     // While driving, the car owns our position
     if (drivingRef.current && cars) {
       const car = cars[drivingRef.current];
-      player.current.pos.set(car.x, EYE + 0.75, car.z);
+      player.current.pos.set(car.x, EYE + 0.9, car.z);
       player.current.vy = 0;
     }
 
     camera.position.copy(player.current.pos);
+    // Third-person / driving chase camera
+    if (thirdPerson || drivingRef.current) {
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      const dist = drivingRef.current ? 7.5 : 4.2;
+      const lift = drivingRef.current ? 2.2 : 0.7;
+      camera.position.addScaledVector(dir, -dist);
+      camera.position.y += lift;
+      camera.position.y = Math.max(0.6, camera.position.y);
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -ARENA + 0.5, ARENA - 0.5);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -ARENA + 0.5, ARENA - 0.5);
+    }
 
     // Apply incoming damage / heal from network
     if (incomingHitRef.current !== 0 && player.current.hp > 0) {
@@ -1107,8 +1228,8 @@ function Game({
       muzzleFlash.current.t = now;
       fireRef.current = now;
       onFireSound?.();
-      // hitscan vs remote players
-      const origin = camera.position.clone();
+      // hitscan vs remote players (always from the player's eye, not the chase camera)
+      const origin = player.current.pos.clone();
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
       const ray = new THREE.Raycaster(origin, dir, 0.1, spec.maxRange);
@@ -1125,7 +1246,35 @@ function Game({
       }
       const hits: { id: string; damage: number }[] = [];
       let impact: { x: number; y: number; z: number } | undefined;
-      if (spec.splashRadius > 0) {
+      if (spec.kind === "flame") {
+        // Cone of fire — everyone in front of us within range gets scorched
+        for (const r of remotePlayersRef.current.values()) {
+          if (!r.alive) continue;
+          if (ctf && r.team && r.team === ctf.myTeam) continue;
+          const to = new THREE.Vector3(r.x, r.y + 0.8, r.z).sub(origin);
+          const d = to.length();
+          if (d > spec.maxRange) continue;
+          to.normalize();
+          if (to.dot(dir) < 0.86) continue; // ~30 degree cone
+          hits.push({ id: r.id, damage: spec.damage });
+        }
+        impact = {
+          x: origin.x + dir.x * spec.maxRange * 0.6,
+          y: origin.y + dir.y * spec.maxRange * 0.6,
+          z: origin.z + dir.z * spec.maxRange * 0.6,
+        };
+      } else if (spec.kind === "portal") {
+        // Blink to wherever you aimed
+        const dest = origin.clone().addScaledVector(dir, best ? Math.max(2, best.dist - 1.5) : spec.maxRange);
+        dest.x = THREE.MathUtils.clamp(dest.x, -ARENA + 1.5, ARENA - 1.5);
+        dest.z = THREE.MathUtils.clamp(dest.z, -ARENA + 1.5, ARENA - 1.5);
+        const { top } = floorAt(dest.x, dest.z, dest.y);
+        explosionsRef.current.push({ x: player.current.pos.x, y: player.current.pos.y - 0.6, z: player.current.pos.z, t: now });
+        player.current.pos.set(dest.x, Math.max(top + EYE, EYE), dest.z);
+        player.current.vy = 0;
+        explosionsRef.current.push({ x: dest.x, y: dest.y, z: dest.z, t: now });
+        onKillFeed("Portal jump");
+      } else if (spec.splashRadius > 0) {
         // RPG — impact point is either the direct hit or max-range point
         const impactPoint = best ? best.point : origin.clone().add(dir.clone().multiplyScalar(spec.maxRange));
         impact = { x: impactPoint.x, y: impactPoint.y, z: impactPoint.z };
@@ -1447,15 +1596,18 @@ function ViewmodelGun({
   controls,
   fireRef,
   viewBobbing = true,
+  weapon = "rifle",
 }: {
   controls: React.MutableRefObject<Controls>;
   fireRef: React.MutableRefObject<number>;
   viewBobbing?: boolean;
+  weapon?: WeaponId;
 }) {
   const { camera } = useThree();
   const group = useRef<THREE.Group>(null);
   const flash = useRef<THREE.Mesh>(null);
   const flashLight = useRef<THREE.PointLight>(null);
+  const jet = useRef<THREE.Mesh>(null);
   const bobPhase = useRef(0);
   useFrame((_, dt) => {
     const g = group.current;
@@ -1486,40 +1638,91 @@ function ViewmodelGun({
     const flashOn = since < 0.06;
     if (flash.current) (flash.current.material as THREE.MeshBasicMaterial).opacity = flashOn ? 1 : 0;
     if (flashLight.current) flashLight.current.intensity = flashOn ? 4 : 0;
+    // Flamethrower jet
+    if (jet.current) {
+      const on = weapon === "flamethrower" && since < 0.12;
+      jet.current.visible = on;
+      if (on) {
+        const s = 0.8 + Math.sin(performance.now() * 0.05) * 0.2;
+        jet.current.scale.set(s, s, 1 + Math.random() * 0.3);
+      }
+    }
   });
+  const body = WEAPON_MODELS[weapon] ?? WEAPON_MODELS.rifle;
   return (
     <group ref={group}>
-      {/* body */}
-      <mesh>
-        <boxGeometry args={[0.12, 0.14, 0.55]} />
-        <meshStandardMaterial color="#0f172a" emissive="#ec4899" emissiveIntensity={0.35} metalness={0.8} roughness={0.25} />
-      </mesh>
-      {/* barrel */}
-      <mesh position={[0, 0.02, -0.4]}>
-        <boxGeometry args={[0.05, 0.05, 0.35]} />
-        <meshStandardMaterial color="#1a1530" emissive="#22d3ee" emissiveIntensity={0.6} metalness={0.9} roughness={0.2} />
-      </mesh>
-      {/* sight */}
-      <mesh position={[0, 0.1, 0.05]}>
-        <boxGeometry args={[0.04, 0.04, 0.12]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={2} toneMapped={false} />
-      </mesh>
+      {body}
       {/* grip */}
       <mesh position={[0, -0.12, 0.12]} rotation={[0.3, 0, 0]}>
         <boxGeometry args={[0.08, 0.18, 0.1]} />
         <meshStandardMaterial color="#0f172a" metalness={0.6} roughness={0.4} />
-      </mesh>
-      {/* magazine */}
-      <mesh position={[0, -0.14, 0]}>
-        <boxGeometry args={[0.08, 0.16, 0.14]} />
-        <meshStandardMaterial color="#1a1530" emissive="#ec4899" emissiveIntensity={0.5} />
       </mesh>
       {/* muzzle flash */}
       <mesh ref={flash} position={[0, 0.02, -0.6]}>
         <sphereGeometry args={[0.09, 12, 12]} />
         <meshBasicMaterial color="#fef08a" transparent opacity={0} toneMapped={false} />
       </mesh>
+      {/* flame jet */}
+      <mesh ref={jet} position={[0, 0.02, -1.3]} rotation={[Math.PI / 2, 0, 0]} visible={false}>
+        <coneGeometry args={[0.42, 1.6, 12, 1, true]} />
+        <meshBasicMaterial color="#fb923c" transparent opacity={0.65} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
       <pointLight ref={flashLight} position={[0, 0.02, -0.6]} color="#fbbf24" intensity={0} distance={6} />
     </group>
   );
 }
+
+const WEAPON_MODELS: Record<WeaponId, React.ReactNode> = {
+  rifle: (
+    <group>
+      <mesh><boxGeometry args={[0.12, 0.14, 0.55]} /><meshStandardMaterial color="#0f172a" metalness={0.8} roughness={0.25} /></mesh>
+      <mesh position={[0, 0.02, -0.4]}><boxGeometry args={[0.05, 0.05, 0.35]} /><meshStandardMaterial color="#1a1530" metalness={0.9} roughness={0.2} /></mesh>
+      <mesh position={[0, -0.14, 0]}><boxGeometry args={[0.08, 0.16, 0.14]} /><meshStandardMaterial color="#1a1530" /></mesh>
+    </group>
+  ),
+  ak47: (
+    <group>
+      <mesh><boxGeometry args={[0.11, 0.13, 0.62]} /><meshStandardMaterial color="#3b2412" roughness={0.7} /></mesh>
+      <mesh position={[0, 0.02, -0.52]}><boxGeometry args={[0.05, 0.05, 0.42]} /><meshStandardMaterial color="#16161c" metalness={0.9} roughness={0.3} /></mesh>
+      {/* curved banana mag */}
+      <mesh position={[0, -0.18, -0.02]} rotation={[0.35, 0, 0]}><boxGeometry args={[0.08, 0.26, 0.12]} /><meshStandardMaterial color="#5a3a1a" roughness={0.6} /></mesh>
+      <mesh position={[0, 0.09, -0.18]}><boxGeometry args={[0.05, 0.05, 0.16]} /><meshStandardMaterial color="#16161c" /></mesh>
+      <mesh position={[0, -0.02, 0.36]}><boxGeometry args={[0.09, 0.14, 0.3]} /><meshStandardMaterial color="#5a3a1a" roughness={0.7} /></mesh>
+    </group>
+  ),
+  pistol: (
+    <group>
+      <mesh position={[0, 0, -0.06]}><boxGeometry args={[0.08, 0.12, 0.3]} /><meshStandardMaterial color="#1f2937" metalness={0.7} roughness={0.35} /></mesh>
+      <mesh position={[0, 0.02, -0.26]}><boxGeometry args={[0.04, 0.04, 0.14]} /><meshStandardMaterial color="#111827" metalness={0.9} /></mesh>
+    </group>
+  ),
+  sniper: (
+    <group>
+      <mesh><boxGeometry args={[0.1, 0.12, 0.8]} /><meshStandardMaterial color="#111827" metalness={0.8} roughness={0.3} /></mesh>
+      <mesh position={[0, 0.02, -0.72]}><boxGeometry args={[0.04, 0.04, 0.5]} /><meshStandardMaterial color="#0b1020" metalness={0.9} /></mesh>
+      <mesh position={[0, 0.13, -0.1]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.05, 0.05, 0.34, 12]} /><meshStandardMaterial color="#0b1020" metalness={0.9} /></mesh>
+    </group>
+  ),
+  rpg: (
+    <group>
+      <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.1, 0.1, 0.95, 14]} /><meshStandardMaterial color="#3f3f2e" roughness={0.8} /></mesh>
+      <mesh position={[0, 0, -0.6]} rotation={[Math.PI / 2, 0, 0]}><coneGeometry args={[0.13, 0.3, 12]} /><meshStandardMaterial color="#7f1d1d" /></mesh>
+    </group>
+  ),
+  flamethrower: (
+    <group>
+      <mesh><boxGeometry args={[0.13, 0.13, 0.5]} /><meshStandardMaterial color="#3f3f46" metalness={0.6} roughness={0.5} /></mesh>
+      <mesh position={[0, 0.02, -0.55]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.07, 0.05, 0.5, 12]} /><meshStandardMaterial color="#27272a" metalness={0.7} /></mesh>
+      <mesh position={[0.02, -0.12, 0.28]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.11, 0.11, 0.36, 12]} /><meshStandardMaterial color="#dc2626" roughness={0.5} /></mesh>
+      <mesh position={[0, 0.03, -0.78]}><boxGeometry args={[0.04, 0.04, 0.04]} /><meshBasicMaterial color="#fb923c" toneMapped={false} /></mesh>
+    </group>
+  ),
+  portalgun: (
+    <group>
+      <mesh><boxGeometry args={[0.14, 0.16, 0.42]} /><meshStandardMaterial color="#e5e7eb" metalness={0.4} roughness={0.4} /></mesh>
+      <mesh position={[0, 0.03, -0.35]} rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.11, 0.03, 10, 24]} /><meshBasicMaterial color="#a855f7" toneMapped={false} /></mesh>
+      <mesh position={[0, 0.03, -0.35]}><sphereGeometry args={[0.06, 14, 14]} /><meshBasicMaterial color="#22d3ee" toneMapped={false} /></mesh>
+      <pointLight position={[0, 0.03, -0.4]} color="#a855f7" intensity={2} distance={3} />
+    </group>
+  ),
+};

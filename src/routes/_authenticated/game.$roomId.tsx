@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, type CarsState, type CarEvent, WEAPONS, makeCTFState, makeCars, CAR_SPAWNS, CAR_BLAST_RADIUS, CAR_RESPAWN_MS, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Target, Rocket, Users, X, Zap } from "lucide-react";
+import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Flame, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Swords, Target, Rocket, Users, Video, Wand2, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -51,6 +51,17 @@ function CustomCrosshair({ cfg }: { cfg: CrosshairCfg }) {
 const PROXIMITY_MAX = 22; // full silence beyond this distance
 const PROXIMITY_NEAR = 2; // full volume within this distance
 
+const WEAPON_ORDER: WeaponId[] = ["rifle", "ak47", "pistol", "sniper", "rpg", "flamethrower", "portalgun"];
+const WEAPON_ICONS: Record<WeaponId, typeof Target> = {
+  rifle: Target,
+  ak47: Swords,
+  pistol: Zap,
+  sniper: CrosshairIcon,
+  rpg: Rocket,
+  flamethrower: Flame,
+  portalgun: Wand2,
+};
+
 export const Route = createFileRoute("/_authenticated/game/$roomId")({
   head: () => ({ meta: [{ title: "Match — NEONFRAG" }] }),
   ssr: false,
@@ -73,6 +84,7 @@ function Game() {
   const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
+  const [thirdPerson, setThirdPerson] = useState(false);
   function selectWeapon(w: WeaponId) {
     if (isCTF) return; // pistol only
     controls.current.weapon = w;
@@ -1072,7 +1084,7 @@ function Game() {
     let raf = 0;
     const prev: Record<number, boolean> = {};
     const dead = (v: number) => (Math.abs(v) < 0.18 ? 0 : v);
-    const order: WeaponId[] = isCTF ? ["pistol"] : ["rifle", "sniper", "rpg"];
+    const order: WeaponId[] = isCTF ? ["pistol"] : WEAPON_ORDER;
     let weaponIdx = 0;
     const pressed = (gp: Gamepad, i: number) => !!gp.buttons[i]?.pressed;
     const tap = (gp: Gamepad, i: number) => {
@@ -1107,6 +1119,8 @@ function Game() {
       }
       // Options / Menu opens chat
       if (tap(gp, 9)) setChatOpen((v) => !v);
+      // Right stick click toggles third person
+      if (tap(gp, 11)) setThirdPerson((v) => !v);
       // Y / Triangle enter or exit vehicle
       if (tap(gp, 3)) triggerInteract();
     };
@@ -1139,6 +1153,11 @@ function Game() {
       if (k === "1") selectWeapon("rifle");
       if (k === "2") selectWeapon("sniper");
       if (k === "3") selectWeapon("rpg");
+      if (k === "4") selectWeapon("ak47");
+      if (k === "5") selectWeapon("pistol");
+      if (k === "6") selectWeapon("flamethrower");
+      if (k === "7") selectWeapon("portalgun");
+      if (k === "v") setThirdPerson((v) => !v);
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1212,6 +1231,8 @@ function Game() {
         onCarEvent={carsEnabled ? handleCarEvent : undefined}
         localId={identity?.id ?? ""}
         onEnterExitCar={setDrivingTeam}
+        thirdPerson={thirdPerson}
+        weapon={weapon}
       />
 
       {/* HUD */}
@@ -1232,6 +1253,14 @@ function Game() {
               aria-label="Toggle fullscreen"
             >
               {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+            </button>
+            <button
+              onClick={() => setThirdPerson((v) => !v)}
+              className={`flex items-center gap-1 rounded-md px-3 py-2 text-xs font-display uppercase tracking-widest backdrop-blur ${thirdPerson ? "bg-accent/30 text-accent" : "bg-black/60 text-muted-foreground"}`}
+              aria-label="Toggle third person camera"
+              title="Third person (V)"
+            >
+              <Video className="size-4" />
             </button>
             <button
               onClick={() => setSettingsOpen((v) => !v)}
@@ -1352,15 +1381,15 @@ function Game() {
 
       {/* Weapon selector */}
       {!isCTF && (
-      <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex gap-1.5">
-        {(["rifle","sniper","rpg"] as WeaponId[]).map((w, i) => {
-          const Icon = w === "rifle" ? Target : w === "sniper" ? CrosshairIcon : Rocket;
+      <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex max-w-[92vw] flex-wrap justify-center gap-1.5">
+        {WEAPON_ORDER.map((w, i) => {
+          const Icon = WEAPON_ICONS[w];
           const active = weapon === w;
           return (
             <button
               key={w}
               onClick={() => selectWeapon(w)}
-              className={`grid size-12 place-items-center rounded-md border backdrop-blur ${
+              className={`grid size-11 place-items-center rounded-md border backdrop-blur ${
                 active
                   ? "border-accent bg-accent/30 text-accent shadow-[0_0_16px_var(--accent)]"
                   : "border-border bg-black/60 text-muted-foreground"

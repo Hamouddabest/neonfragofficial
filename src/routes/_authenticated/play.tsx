@@ -5,12 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Settings as SettingsIcon } from "lucide-react";
+import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { GameSettings } from "@/components/game/GameSettings";
 import { useIsOwner } from "@/hooks/use-is-owner";
 import { useAuth } from "@/hooks/use-auth";
+import { Room, RoomEvent, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
+import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
 export const Route = createFileRoute("/_authenticated/play")({
   head: () => ({ meta: [{ title: "Lobby — NEONFRAG" }] }),
@@ -55,6 +57,67 @@ function PlayLobby() {
   const isPartyLeader = !!partyCode && partyLeader === identity?.id;
   const partyCodeRef = useRef<string | null>(null);
   partyCodeRef.current = partyCode;
+
+  // ===== Party voice chat (lobby) =====
+  const partyRoomRef = useRef<Room | null>(null);
+  const [voiceState, setVoiceState] = useState<"off" | "connecting" | "on" | "error">("off");
+  const [micOn, setMicOn] = useState(true);
+  const [speakingIds, setSpeakingIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!partyCode || !identity) {
+      setVoiceState("off");
+      return;
+    }
+    let cancelled = false;
+    const room = new Room({ adaptiveStream: true, dynacast: true });
+    partyRoomRef.current = room;
+    setVoiceState("connecting");
+    const audioEls: HTMLAudioElement[] = [];
+    room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track.kind !== "audio") return;
+      const el = track.attach() as HTMLAudioElement;
+      el.dataset["pid"] = participant.identity;
+      el.style.display = "none";
+      document.body.appendChild(el);
+      audioEls.push(el);
+    });
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      setSpeakingIds(speakers.map((s) => s.identity));
+    });
+    (async () => {
+      try {
+        const args = { roomId: `party-${partyCode}`, name: identity.name };
+        const res = identity.isGuest
+          ? await getLiveKitTokenPublic({ data: { ...args, identity: identity.id } })
+          : await getLiveKitToken({ data: args });
+        if (cancelled) return;
+        await room.connect(res.url, res.token);
+        if (cancelled) return;
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMicOn(true);
+        setVoiceState("on");
+      } catch {
+        if (!cancelled) setVoiceState("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      for (const el of audioEls) el.remove();
+      void room.disconnect();
+      partyRoomRef.current = null;
+      setSpeakingIds([]);
+      setVoiceState("off");
+    };
+  }, [partyCode, identity]);
+
+  async function toggleMic() {
+    const room = partyRoomRef.current;
+    if (!room) return;
+    const next = !micOn;
+    await room.localParticipant.setMicrophoneEnabled(next);
+    setMicOn(next);
+  }
 
   useEffect(() => {
     if (!partyCode || !identity) return;
@@ -429,13 +492,24 @@ function PlayLobby() {
                 <Button onClick={leaveParty} variant="ghost" size="sm" className="h-10 text-muted-foreground">
                   <DoorOpen className="mr-2 size-4" /> Leave party
                 </Button>
+                <Button
+                  onClick={() => void toggleMic()}
+                  variant="outline"
+                  size="sm"
+                  disabled={voiceState !== "on"}
+                  className={`h-10 ${micOn && voiceState === "on" ? "border-emerald-400/60 text-emerald-300" : "text-muted-foreground"}`}
+                >
+                  {micOn && voiceState === "on" ? <Mic className="mr-2 size-4" /> : <MicOff className="mr-2 size-4" />}
+                  {voiceState === "connecting" ? "Connecting…" : voiceState === "error" ? "Voice off" : micOn ? "Mic on" : "Muted"}
+                </Button>
                 <span className="ml-auto text-xs text-muted-foreground">{partyMembers.length}/{PARTY_MAX}</span>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {partyMembers.slice(0, PARTY_MAX).map((m) => (
-                  <div key={m.id} className="flex items-center gap-2 rounded-lg border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-2">
+                  <div key={m.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${speakingIds.includes(m.id) ? "border-emerald-400 bg-emerald-400/10 shadow-[0_0_12px_rgba(52,211,153,0.5)]" : "border-fuchsia-400/30 bg-fuchsia-400/10"}`}>
                     <UserCircle2 className="size-4 text-fuchsia-300" />
                     <span className="text-sm">{m.name}</span>
+                    {speakingIds.includes(m.id) && <Mic className="size-3.5 animate-pulse text-emerald-300" />}
                     {partyLeader === m.id && (
                       <span className="ml-auto rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Leader</span>
                     )}
