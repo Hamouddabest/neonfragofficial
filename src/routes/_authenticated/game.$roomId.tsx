@@ -1255,6 +1255,14 @@ function Game() {
               {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
             </button>
             <button
+              onClick={() => setThirdPerson((v) => !v)}
+              className={`flex items-center gap-1 rounded-md px-3 py-2 text-xs font-display uppercase tracking-widest backdrop-blur ${thirdPerson ? "bg-accent/30 text-accent" : "bg-black/60 text-muted-foreground"}`}
+              aria-label="Toggle third person camera"
+              title="Third person (V)"
+            >
+              <Video className="size-4" />
+            </button>
+            <button
               onClick={() => setSettingsOpen((v) => !v)}
               className="flex items-center gap-1 rounded-md bg-black/60 px-3 py-2 text-xs font-display uppercase tracking-widest text-primary backdrop-blur"
               aria-label="Settings"
