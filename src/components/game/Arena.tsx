@@ -1323,16 +1323,23 @@ function Game({
           z: origin.z + dir.z * spec.maxRange * 0.6,
         };
       } else if (spec.kind === "portal") {
-        // Blink to wherever you aimed
-        const dest = origin.clone().addScaledVector(dir, best ? Math.max(2, best.dist - 1.5) : spec.maxRange);
-        dest.x = THREE.MathUtils.clamp(dest.x, -ARENA + 1.5, ARENA - 1.5);
-        dest.z = THREE.MathUtils.clamp(dest.z, -ARENA + 1.5, ARENA - 1.5);
+        // Place a portal on the ground where you aimed
+        const range = Math.min(spec.maxRange, 40);
+        const dest = origin.clone().addScaledVector(dir, range);
+        // find where the aim ray meets the ground plane, if it points downward
+        if (dir.y < -0.02) {
+          const t = (origin.y - 0.05) / -dir.y;
+          if (t > 0.5 && t < range) dest.copy(origin).addScaledVector(dir, t);
+        }
+        dest.x = THREE.MathUtils.clamp(dest.x, -ARENA + 2, ARENA - 2);
+        dest.z = THREE.MathUtils.clamp(dest.z, -ARENA + 2, ARENA - 2);
         const { top } = floorAt(dest.x, dest.z, dest.y);
-        explosionsRef.current.push({ x: player.current.pos.x, y: player.current.pos.y - 0.6, z: player.current.pos.z, t: now });
-        player.current.pos.set(dest.x, Math.max(top + EYE, EYE), dest.z);
-        player.current.vy = 0;
-        explosionsRef.current.push({ x: dest.x, y: dest.y, z: dest.z, t: now });
-        onKillFeed("Portal jump");
+        const slot = c.portalSlot ?? 1;
+        if (portalsRef) {
+          const p: Portal = { x: dest.x, y: top + 0.05, z: dest.z };
+          if (slot === 1) portalsRef.current.a = p; else portalsRef.current.b = p;
+          onKillFeed(`Portal ${slot} placed`);
+        }
       } else if (spec.splashRadius > 0) {
         // RPG — impact point is either the direct hit or max-range point
         const impactPoint = best ? best.point : origin.clone().add(dir.clone().multiplyScalar(spec.maxRange));
