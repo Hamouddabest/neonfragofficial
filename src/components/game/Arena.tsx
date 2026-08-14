@@ -289,6 +289,10 @@ export function ArenaScene({
   onEnterExitCar,
   thirdPerson = false,
   weapon = "rifle",
+  portalsRef,
+  horror = false,
+  horrorRef,
+  onJumpscare,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -318,6 +322,10 @@ export function ArenaScene({
   onEnterExitCar?: (driving: Team | null) => void;
   thirdPerson?: boolean;
   weapon?: WeaponId;
+  portalsRef?: React.MutableRefObject<PortalsState>;
+  horror?: boolean;
+  horrorRef?: React.MutableRefObject<HorrorState | null>;
+  onJumpscare?: () => void;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -330,7 +338,9 @@ export function ArenaScene({
       gl={{ antialias: quality !== "simple", powerPreference: "high-performance" }}
     >
       <QualityController quality={quality} />
-      {quality === "simple" ? (
+      {horror ? (
+        <color attach="background" args={["#050406"]} />
+      ) : quality === "simple" ? (
         <color attach="background" args={["#0a0716"]} />
       ) : (
         <Sky
@@ -341,10 +351,12 @@ export function ArenaScene({
           mieDirectionalG={0.86}
         />
       )}
-      {quality === "fancy" && <fogExp2 attach="fog" args={["#2b2450", 0.006]} />}
-      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.38 : 0.45} />
-      {quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 0.6]} />}
-      <directionalLight
+      {horror && <fogExp2 attach="fog" args={["#05040a", 0.09]} />}
+      {!horror && quality === "fancy" && <fogExp2 attach="fog" args={["#2b2450", 0.006]} />}
+      <ambientLight intensity={horror ? 0.06 : quality === "simple" ? 0.9 : quality === "fancy" ? 0.38 : 0.45} />
+      {!horror && quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 0.6]} />}
+      {horror && <Flashlight />}
+      {!horror && <directionalLight
         position={quality === "fancy" ? [34, 46, -28] : [20, 30, 10]}
         color={quality === "fancy" ? "#ffe3b0" : "#ffffff"}
         intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 1.6 : 1.1}
@@ -358,8 +370,15 @@ export function ArenaScene({
         shadow-camera-top={45}
         shadow-camera-bottom={-45}
         shadow-camera-far={140}
-      />
-      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} /> : <ArenaWorld quality={quality} />}
+      />}
+      {horrorRef ? (
+        <HorrorWorld horrorRef={horrorRef} />
+      ) : customArena ? (
+        <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} />
+      ) : (
+        <ArenaWorld quality={quality} />
+      )}
+      {portalsRef && <PortalsView portalsRef={portalsRef} />}
       {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
       {carsRef && <CarsView carsRef={carsRef} quality={quality} />}
       {practice && <PracticeTargets targetsRef={targetsRef} />}
@@ -393,6 +412,9 @@ export function ArenaScene({
         localId={localId}
         onEnterExitCar={onEnterExitCar}
         thirdPerson={thirdPerson}
+        portalsRef={portalsRef}
+        horrorRef={horrorRef}
+        onJumpscare={onJumpscare}
       />
       {!thirdPerson && <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} weapon={weapon} />}
       {thirdPerson && localPosRef && <LocalBodyView localPosRef={localPosRef} controls={controls} />}
