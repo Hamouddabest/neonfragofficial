@@ -172,7 +172,35 @@ export type Controls = {
   weapon: WeaponId;
   zoom: boolean;
   interact: boolean;
+  sprint?: boolean;
+  /** which portal the portal gun will place next */
+  portalSlot?: 1 | 2;
 };
+
+// ===== Portals =====
+export type Portal = { x: number; y: number; z: number };
+export type PortalsState = { a: Portal | null; b: Portal | null };
+export function makePortals(): PortalsState {
+  return { a: null, b: null };
+}
+
+// ===== Secret horror mode =====
+export type Monster = { id: number; x: number; z: number; hp: number; alive: boolean; seed: number; spawnAt: number; lastHitAt: number };
+export type HorrorState = {
+  phase: "arena" | "hallway" | "done";
+  kills: number;
+  target: number;
+  monsters: Monster[];
+  jumpscareAt: number;
+  nextSpawn: number;
+  nextId: number;
+  hallwayMonster: { x: number; z: number; revealed: boolean } | null;
+};
+export const HORROR_TARGET = 20;
+export const MONSTER_HP = 100;
+export function makeHorror(): HorrorState {
+  return { phase: "arena", kills: 0, target: HORROR_TARGET, monsters: [], jumpscareAt: 0, nextSpawn: 0, nextId: 1, hallwayMonster: null };
+}
 
 export type RemotePlayer = {
   id: string;
