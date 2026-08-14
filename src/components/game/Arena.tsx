@@ -931,6 +931,8 @@ function Game({
   const lastInteract = useRef(false);
   const lastCarSync = useRef(0);
   const prevCarAlive = useRef<Record<Team, boolean>>({ red: true, blue: true });
+  const portalCooldown = useRef(0);
+  const lastMonsterHit = useRef(0);
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
@@ -1009,7 +1011,8 @@ function Game({
     const boost = now < player.current.speedBoostUntil ? 1.9 : 1;
     const opsMult = localOpsRef?.current.speedMult ?? 1;
     const frozen = localOpsRef?.current.frozen ?? false;
-    const speed = 6 * boost * opsMult;
+    const sprinting = !!c.sprint && c.moveY > 0.1;
+    const speed = 6 * boost * opsMult * (sprinting ? 1.75 : 1);
     if (frozen) { c.moveX = 0; c.moveY = 0; }
 
     // ===== Vehicles: enter / exit / drive =====
