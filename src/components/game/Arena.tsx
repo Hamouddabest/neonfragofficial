@@ -935,100 +935,6 @@ function Game({
   const lastMonsterHit = useRef(0);
 
   useEffect(() => {
-    // ===== Portal traversal =====
-    const portals = portalsRef?.current;
-    if (portals && portals.a && portals.b && now > portalCooldown.current && !drivingRef.current) {
-      const pp = player.current.pos;
-      const inA = Math.hypot(pp.x - portals.a.x, pp.z - portals.a.z) < 1.5 && Math.abs(pp.y - EYE - portals.a.y) < 2.5;
-      const inB = Math.hypot(pp.x - portals.b.x, pp.z - portals.b.z) < 1.5 && Math.abs(pp.y - EYE - portals.b.y) < 2.5;
-      if (inA || inB) {
-        const dst = inA ? portals.b : portals.a;
-        explosionsRef.current.push({ x: pp.x, y: pp.y - 0.6, z: pp.z, t: now });
-        pp.set(dst.x, dst.y + EYE + 0.1, dst.z);
-        player.current.vy = 0;
-        portalCooldown.current = now + 1200;
-        onKillFeed(inA ? "Entered Portal 1 → Portal 2" : "Entered Portal 2 → Portal 1");
-      }
-    }
-
-    // ===== Secret horror mode =====
-    const horror = horrorRef?.current;
-    if (horror) {
-      const pp = player.current.pos;
-      if (horror.phase === "arena") {
-        const maxAlive = 3 + Math.floor(horror.kills / 6);
-        const alive = horror.monsters.filter((m) => m.alive).length;
-        if (alive < maxAlive && now > horror.nextSpawn) {
-          horror.nextSpawn = now + 2200;
-          const ang = Math.random() * Math.PI * 2;
-          const dist = 16 + Math.random() * 10;
-          horror.monsters.push({
-            id: horror.nextId++,
-            x: THREE.MathUtils.clamp(pp.x + Math.cos(ang) * dist, -ARENA + 2, ARENA - 2),
-            z: THREE.MathUtils.clamp(pp.z + Math.sin(ang) * dist, -ARENA + 2, ARENA - 2),
-            hp: MONSTER_HP,
-            alive: true,
-            seed: Math.random() * 10,
-            spawnAt: now,
-            lastHitAt: 0,
-          });
-          if (horror.monsters.length > 40) horror.monsters = horror.monsters.filter((m) => m.alive);
-        }
-        for (const m of horror.monsters) {
-          if (!m.alive) continue;
-          const dx = pp.x - m.x;
-          const dz = pp.z - m.z;
-          const d = Math.hypot(dx, dz) || 1;
-          const mspeed = 3.1 + Math.min(1.6, horror.kills * 0.06);
-          if (d > 1.4) {
-            m.x += (dx / d) * mspeed * dt;
-            m.z += (dz / d) * mspeed * dt;
-          } else if (now - lastMonsterHit.current > 1100 && player.current.hp > 0) {
-            lastMonsterHit.current = now;
-            horror.jumpscareAt = now;
-            onJumpscare?.();
-            if (!(localOpsRef?.current.god ?? false)) player.current.hp -= 14;
-            // knock the monster back a little so it re-approaches
-            m.x -= (dx / d) * 2.2;
-            m.z -= (dz / d) * 2.2;
-          }
-        }
-        if (horror.kills >= horror.target) {
-          horror.phase = "hallway";
-          horror.monsters = [];
-          pp.set(0, EYE, 24);
-          c.yaw = Math.PI; // face down the hallway
-          player.current.vy = 0;
-          player.current.hp = Math.max(player.current.hp, 60);
-          horror.hallwayMonster = null;
-          horror.nextSpawn = now + 4000;
-          onKillFeed("The arena dissolves… you are somewhere else.");
-        }
-      } else if (horror.phase === "hallway") {
-        pp.x = THREE.MathUtils.clamp(pp.x, -1.9, 1.9);
-        if (!horror.hallwayMonster && now > horror.nextSpawn) {
-          horror.hallwayMonster = { x: pp.x, z: pp.z + 4.5, revealed: false };
-        }
-        const hm = horror.hallwayMonster;
-        if (hm && !hm.revealed) {
-          // keep it just behind the player
-          const behind = new THREE.Vector3(Math.sin(c.yaw), 0, Math.cos(c.yaw)).multiplyScalar(4.5);
-          hm.x = THREE.MathUtils.clamp(pp.x + behind.x, -1.8, 1.8);
-          hm.z = pp.z + behind.z;
-          const look = new THREE.Vector3();
-          camera.getWorldDirection(look);
-          const to = new THREE.Vector3(hm.x - pp.x, 0, hm.z - pp.z).normalize();
-          if (look.setY(0).normalize().dot(to) > 0.72) {
-            hm.revealed = true;
-            horror.jumpscareAt = now;
-            horror.phase = "done";
-            onJumpscare?.();
-            onKillFeed("IT FOUND YOU.");
-          }
-        }
-      }
-    }
-
     camera.position.copy(player.current.pos);
   }, [camera]);
 
@@ -1250,6 +1156,100 @@ function Game({
       const car = cars[drivingRef.current];
       player.current.pos.set(car.x, EYE + 0.9, car.z);
       player.current.vy = 0;
+    }
+
+    // ===== Portal traversal =====
+    const portals = portalsRef?.current;
+    if (portals && portals.a && portals.b && now > portalCooldown.current && !drivingRef.current) {
+      const pp = player.current.pos;
+      const inA = Math.hypot(pp.x - portals.a.x, pp.z - portals.a.z) < 1.5 && Math.abs(pp.y - EYE - portals.a.y) < 2.5;
+      const inB = Math.hypot(pp.x - portals.b.x, pp.z - portals.b.z) < 1.5 && Math.abs(pp.y - EYE - portals.b.y) < 2.5;
+      if (inA || inB) {
+        const dst = inA ? portals.b : portals.a;
+        explosionsRef.current.push({ x: pp.x, y: pp.y - 0.6, z: pp.z, t: now });
+        pp.set(dst.x, dst.y + EYE + 0.1, dst.z);
+        player.current.vy = 0;
+        portalCooldown.current = now + 1200;
+        onKillFeed(inA ? "Entered Portal 1 → Portal 2" : "Entered Portal 2 → Portal 1");
+      }
+    }
+
+    // ===== Secret horror mode =====
+    const horror = horrorRef?.current;
+    if (horror) {
+      const pp = player.current.pos;
+      if (horror.phase === "arena") {
+        const maxAlive = 3 + Math.floor(horror.kills / 6);
+        const alive = horror.monsters.filter((m) => m.alive).length;
+        if (alive < maxAlive && now > horror.nextSpawn) {
+          horror.nextSpawn = now + 2200;
+          const ang = Math.random() * Math.PI * 2;
+          const dist = 16 + Math.random() * 10;
+          horror.monsters.push({
+            id: horror.nextId++,
+            x: THREE.MathUtils.clamp(pp.x + Math.cos(ang) * dist, -ARENA + 2, ARENA - 2),
+            z: THREE.MathUtils.clamp(pp.z + Math.sin(ang) * dist, -ARENA + 2, ARENA - 2),
+            hp: MONSTER_HP,
+            alive: true,
+            seed: Math.random() * 10,
+            spawnAt: now,
+            lastHitAt: 0,
+          });
+          if (horror.monsters.length > 40) horror.monsters = horror.monsters.filter((m) => m.alive);
+        }
+        for (const m of horror.monsters) {
+          if (!m.alive) continue;
+          const dx = pp.x - m.x;
+          const dz = pp.z - m.z;
+          const d = Math.hypot(dx, dz) || 1;
+          const mspeed = 3.1 + Math.min(1.6, horror.kills * 0.06);
+          if (d > 1.4) {
+            m.x += (dx / d) * mspeed * dt;
+            m.z += (dz / d) * mspeed * dt;
+          } else if (now - lastMonsterHit.current > 1100 && player.current.hp > 0) {
+            lastMonsterHit.current = now;
+            horror.jumpscareAt = now;
+            onJumpscare?.();
+            if (!(localOpsRef?.current.god ?? false)) player.current.hp -= 14;
+            // knock the monster back a little so it re-approaches
+            m.x -= (dx / d) * 2.2;
+            m.z -= (dz / d) * 2.2;
+          }
+        }
+        if (horror.kills >= horror.target) {
+          horror.phase = "hallway";
+          horror.monsters = [];
+          pp.set(0, EYE, 24);
+          c.yaw = Math.PI; // face down the hallway
+          player.current.vy = 0;
+          player.current.hp = Math.max(player.current.hp, 60);
+          horror.hallwayMonster = null;
+          horror.nextSpawn = now + 4000;
+          onKillFeed("The arena dissolves… you are somewhere else.");
+        }
+      } else if (horror.phase === "hallway") {
+        pp.x = THREE.MathUtils.clamp(pp.x, -1.9, 1.9);
+        if (!horror.hallwayMonster && now > horror.nextSpawn) {
+          horror.hallwayMonster = { x: pp.x, z: pp.z + 4.5, revealed: false };
+        }
+        const hm = horror.hallwayMonster;
+        if (hm && !hm.revealed) {
+          // keep it just behind the player
+          const behind = new THREE.Vector3(Math.sin(c.yaw), 0, Math.cos(c.yaw)).multiplyScalar(4.5);
+          hm.x = THREE.MathUtils.clamp(pp.x + behind.x, -1.8, 1.8);
+          hm.z = pp.z + behind.z;
+          const look = new THREE.Vector3();
+          camera.getWorldDirection(look);
+          const to = new THREE.Vector3(hm.x - pp.x, 0, hm.z - pp.z).normalize();
+          if (look.setY(0).normalize().dot(to) > 0.72) {
+            hm.revealed = true;
+            horror.jumpscareAt = now;
+            horror.phase = "done";
+            onJumpscare?.();
+            onKillFeed("IT FOUND YOU.");
+          }
+        }
+      }
     }
 
     camera.position.copy(player.current.pos);
