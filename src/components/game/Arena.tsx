@@ -863,6 +863,9 @@ function Game({
   localId = "",
   onEnterExitCar,
   thirdPerson = false,
+  portalsRef,
+  horrorRef,
+  onJumpscare,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -890,6 +893,9 @@ function Game({
   localId?: string;
   onEnterExitCar?: (driving: Team | null) => void;
   thirdPerson?: boolean;
+  portalsRef?: React.MutableRefObject<PortalsState>;
+  horrorRef?: React.MutableRefObject<HorrorState | null>;
+  onJumpscare?: () => void;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
