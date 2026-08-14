@@ -172,7 +172,35 @@ export type Controls = {
   weapon: WeaponId;
   zoom: boolean;
   interact: boolean;
+  sprint?: boolean;
+  /** which portal the portal gun will place next */
+  portalSlot?: 1 | 2;
 };
+
+// ===== Portals =====
+export type Portal = { x: number; y: number; z: number };
+export type PortalsState = { a: Portal | null; b: Portal | null };
+export function makePortals(): PortalsState {
+  return { a: null, b: null };
+}
+
+// ===== Secret horror mode =====
+export type Monster = { id: number; x: number; z: number; hp: number; alive: boolean; seed: number; spawnAt: number; lastHitAt: number };
+export type HorrorState = {
+  phase: "arena" | "hallway" | "done";
+  kills: number;
+  target: number;
+  monsters: Monster[];
+  jumpscareAt: number;
+  nextSpawn: number;
+  nextId: number;
+  hallwayMonster: { x: number; z: number; revealed: boolean } | null;
+};
+export const HORROR_TARGET = 20;
+export const MONSTER_HP = 100;
+export function makeHorror(): HorrorState {
+  return { phase: "arena", kills: 0, target: HORROR_TARGET, monsters: [], jumpscareAt: 0, nextSpawn: 0, nextId: 1, hallwayMonster: null };
+}
 
 export type RemotePlayer = {
   id: string;
@@ -261,6 +289,10 @@ export function ArenaScene({
   onEnterExitCar,
   thirdPerson = false,
   weapon = "rifle",
+  portalsRef,
+  horror = false,
+  horrorRef,
+  onJumpscare,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -290,6 +322,10 @@ export function ArenaScene({
   onEnterExitCar?: (driving: Team | null) => void;
   thirdPerson?: boolean;
   weapon?: WeaponId;
+  portalsRef?: React.MutableRefObject<PortalsState>;
+  horror?: boolean;
+  horrorRef?: React.MutableRefObject<HorrorState | null>;
+  onJumpscare?: () => void;
 }) {
   const fireRef = useRef(0);
   const explosionsRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
@@ -302,7 +338,9 @@ export function ArenaScene({
       gl={{ antialias: quality !== "simple", powerPreference: "high-performance" }}
     >
       <QualityController quality={quality} />
-      {quality === "simple" ? (
+      {horror ? (
+        <color attach="background" args={["#050406"]} />
+      ) : quality === "simple" ? (
         <color attach="background" args={["#0a0716"]} />
       ) : (
         <Sky
@@ -313,10 +351,12 @@ export function ArenaScene({
           mieDirectionalG={0.86}
         />
       )}
-      {quality === "fancy" && <fogExp2 attach="fog" args={["#2b2450", 0.006]} />}
-      <ambientLight intensity={quality === "simple" ? 0.9 : quality === "fancy" ? 0.38 : 0.45} />
-      {quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 0.6]} />}
-      <directionalLight
+      {horror && <fogExp2 attach="fog" args={["#05040a", 0.09]} />}
+      {!horror && quality === "fancy" && <fogExp2 attach="fog" args={["#2b2450", 0.006]} />}
+      <ambientLight intensity={horror ? 0.06 : quality === "simple" ? 0.9 : quality === "fancy" ? 0.38 : 0.45} />
+      {!horror && quality === "fancy" && <hemisphereLight args={["#bcd4ff", "#3d3266", 0.6]} />}
+      {horror && <Flashlight />}
+      {!horror && <directionalLight
         position={quality === "fancy" ? [34, 46, -28] : [20, 30, 10]}
         color={quality === "fancy" ? "#ffe3b0" : "#ffffff"}
         intensity={quality === "simple" ? 0.7 : quality === "fancy" ? 1.6 : 1.1}
@@ -330,8 +370,15 @@ export function ArenaScene({
         shadow-camera-top={45}
         shadow-camera-bottom={-45}
         shadow-camera-far={140}
-      />
-      {customArena ? <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} /> : <ArenaWorld quality={quality} />}
+      />}
+      {horrorRef ? (
+        <HorrorWorld horrorRef={horrorRef} />
+      ) : customArena ? (
+        <CustomArenaWorld blocks={customArena.blocks} spawnPoints={customArena.spawnPoints} quality={quality} />
+      ) : (
+        <ArenaWorld quality={quality} />
+      )}
+      {portalsRef && <PortalsView portalsRef={portalsRef} />}
       {ctfRef && <CTFWorld ctfRef={ctfRef} remotePlayersRef={remotePlayersRef} />}
       {carsRef && <CarsView carsRef={carsRef} quality={quality} />}
       {practice && <PracticeTargets targetsRef={targetsRef} />}
@@ -365,6 +412,9 @@ export function ArenaScene({
         localId={localId}
         onEnterExitCar={onEnterExitCar}
         thirdPerson={thirdPerson}
+        portalsRef={portalsRef}
+        horrorRef={horrorRef}
+        onJumpscare={onJumpscare}
       />
       {!thirdPerson && <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} weapon={weapon} />}
       {thirdPerson && localPosRef && <LocalBodyView localPosRef={localPosRef} controls={controls} />}
@@ -813,6 +863,9 @@ function Game({
   localId = "",
   onEnterExitCar,
   thirdPerson = false,
+  portalsRef,
+  horrorRef,
+  onJumpscare,
 }: {
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
@@ -840,6 +893,9 @@ function Game({
   localId?: string;
   onEnterExitCar?: (driving: Team | null) => void;
   thirdPerson?: boolean;
+  portalsRef?: React.MutableRefObject<PortalsState>;
+  horrorRef?: React.MutableRefObject<HorrorState | null>;
+  onJumpscare?: () => void;
 }) {
   const { camera } = useThree();
   const pickSpawn = () => {
@@ -875,6 +931,8 @@ function Game({
   const lastInteract = useRef(false);
   const lastCarSync = useRef(0);
   const prevCarAlive = useRef<Record<Team, boolean>>({ red: true, blue: true });
+  const portalCooldown = useRef(0);
+  const lastMonsterHit = useRef(0);
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
@@ -953,7 +1011,8 @@ function Game({
     const boost = now < player.current.speedBoostUntil ? 1.9 : 1;
     const opsMult = localOpsRef?.current.speedMult ?? 1;
     const frozen = localOpsRef?.current.frozen ?? false;
-    const speed = 6 * boost * opsMult;
+    const sprinting = !!c.sprint && c.moveY > 0.1;
+    const speed = 6 * boost * opsMult * (sprinting ? 1.75 : 1);
     if (frozen) { c.moveX = 0; c.moveY = 0; }
 
     // ===== Vehicles: enter / exit / drive =====
@@ -1097,6 +1156,100 @@ function Game({
       const car = cars[drivingRef.current];
       player.current.pos.set(car.x, EYE + 0.9, car.z);
       player.current.vy = 0;
+    }
+
+    // ===== Portal traversal =====
+    const portals = portalsRef?.current;
+    if (portals && portals.a && portals.b && now > portalCooldown.current && !drivingRef.current) {
+      const pp = player.current.pos;
+      const inA = Math.hypot(pp.x - portals.a.x, pp.z - portals.a.z) < 1.5 && Math.abs(pp.y - EYE - portals.a.y) < 2.5;
+      const inB = Math.hypot(pp.x - portals.b.x, pp.z - portals.b.z) < 1.5 && Math.abs(pp.y - EYE - portals.b.y) < 2.5;
+      if (inA || inB) {
+        const dst = inA ? portals.b : portals.a;
+        explosionsRef.current.push({ x: pp.x, y: pp.y - 0.6, z: pp.z, t: now });
+        pp.set(dst.x, dst.y + EYE + 0.1, dst.z);
+        player.current.vy = 0;
+        portalCooldown.current = now + 1200;
+        onKillFeed(inA ? "Entered Portal 1 → Portal 2" : "Entered Portal 2 → Portal 1");
+      }
+    }
+
+    // ===== Secret horror mode =====
+    const horror = horrorRef?.current;
+    if (horror) {
+      const pp = player.current.pos;
+      if (horror.phase === "arena") {
+        const maxAlive = 3 + Math.floor(horror.kills / 6);
+        const alive = horror.monsters.filter((m) => m.alive).length;
+        if (alive < maxAlive && now > horror.nextSpawn) {
+          horror.nextSpawn = now + 2200;
+          const ang = Math.random() * Math.PI * 2;
+          const dist = 16 + Math.random() * 10;
+          horror.monsters.push({
+            id: horror.nextId++,
+            x: THREE.MathUtils.clamp(pp.x + Math.cos(ang) * dist, -ARENA + 2, ARENA - 2),
+            z: THREE.MathUtils.clamp(pp.z + Math.sin(ang) * dist, -ARENA + 2, ARENA - 2),
+            hp: MONSTER_HP,
+            alive: true,
+            seed: Math.random() * 10,
+            spawnAt: now,
+            lastHitAt: 0,
+          });
+          if (horror.monsters.length > 40) horror.monsters = horror.monsters.filter((m) => m.alive);
+        }
+        for (const m of horror.monsters) {
+          if (!m.alive) continue;
+          const dx = pp.x - m.x;
+          const dz = pp.z - m.z;
+          const d = Math.hypot(dx, dz) || 1;
+          const mspeed = 3.1 + Math.min(1.6, horror.kills * 0.06);
+          if (d > 1.4) {
+            m.x += (dx / d) * mspeed * dt;
+            m.z += (dz / d) * mspeed * dt;
+          } else if (now - lastMonsterHit.current > 1100 && player.current.hp > 0) {
+            lastMonsterHit.current = now;
+            horror.jumpscareAt = now;
+            onJumpscare?.();
+            if (!(localOpsRef?.current.god ?? false)) player.current.hp -= 14;
+            // knock the monster back a little so it re-approaches
+            m.x -= (dx / d) * 2.2;
+            m.z -= (dz / d) * 2.2;
+          }
+        }
+        if (horror.kills >= horror.target) {
+          horror.phase = "hallway";
+          horror.monsters = [];
+          pp.set(0, EYE, 24);
+          c.yaw = Math.PI; // face down the hallway
+          player.current.vy = 0;
+          player.current.hp = Math.max(player.current.hp, 60);
+          horror.hallwayMonster = null;
+          horror.nextSpawn = now + 4000;
+          onKillFeed("The arena dissolves… you are somewhere else.");
+        }
+      } else if (horror.phase === "hallway") {
+        pp.x = THREE.MathUtils.clamp(pp.x, -1.9, 1.9);
+        if (!horror.hallwayMonster && now > horror.nextSpawn) {
+          horror.hallwayMonster = { x: pp.x, z: pp.z + 4.5, revealed: false };
+        }
+        const hm = horror.hallwayMonster;
+        if (hm && !hm.revealed) {
+          // keep it just behind the player
+          const behind = new THREE.Vector3(Math.sin(c.yaw), 0, Math.cos(c.yaw)).multiplyScalar(4.5);
+          hm.x = THREE.MathUtils.clamp(pp.x + behind.x, -1.8, 1.8);
+          hm.z = pp.z + behind.z;
+          const look = new THREE.Vector3();
+          camera.getWorldDirection(look);
+          const to = new THREE.Vector3(hm.x - pp.x, 0, hm.z - pp.z).normalize();
+          if (look.setY(0).normalize().dot(to) > 0.72) {
+            hm.revealed = true;
+            horror.jumpscareAt = now;
+            horror.phase = "done";
+            onJumpscare?.();
+            onKillFeed("IT FOUND YOU.");
+          }
+        }
+      }
     }
 
     camera.position.copy(player.current.pos);
@@ -1264,16 +1417,23 @@ function Game({
           z: origin.z + dir.z * spec.maxRange * 0.6,
         };
       } else if (spec.kind === "portal") {
-        // Blink to wherever you aimed
-        const dest = origin.clone().addScaledVector(dir, best ? Math.max(2, best.dist - 1.5) : spec.maxRange);
-        dest.x = THREE.MathUtils.clamp(dest.x, -ARENA + 1.5, ARENA - 1.5);
-        dest.z = THREE.MathUtils.clamp(dest.z, -ARENA + 1.5, ARENA - 1.5);
+        // Place a portal on the ground where you aimed
+        const range = Math.min(spec.maxRange, 40);
+        const dest = origin.clone().addScaledVector(dir, range);
+        // find where the aim ray meets the ground plane, if it points downward
+        if (dir.y < -0.02) {
+          const t = (origin.y - 0.05) / -dir.y;
+          if (t > 0.5 && t < range) dest.copy(origin).addScaledVector(dir, t);
+        }
+        dest.x = THREE.MathUtils.clamp(dest.x, -ARENA + 2, ARENA - 2);
+        dest.z = THREE.MathUtils.clamp(dest.z, -ARENA + 2, ARENA - 2);
         const { top } = floorAt(dest.x, dest.z, dest.y);
-        explosionsRef.current.push({ x: player.current.pos.x, y: player.current.pos.y - 0.6, z: player.current.pos.z, t: now });
-        player.current.pos.set(dest.x, Math.max(top + EYE, EYE), dest.z);
-        player.current.vy = 0;
-        explosionsRef.current.push({ x: dest.x, y: dest.y, z: dest.z, t: now });
-        onKillFeed("Portal jump");
+        const slot = c.portalSlot ?? 1;
+        if (portalsRef) {
+          const p: Portal = { x: dest.x, y: top + 0.05, z: dest.z };
+          if (slot === 1) portalsRef.current.a = p; else portalsRef.current.b = p;
+          onKillFeed(`Portal ${slot} placed`);
+        }
       } else if (spec.splashRadius > 0) {
         // RPG — impact point is either the direct hit or max-range point
         const impactPoint = best ? best.point : origin.clone().add(dir.clone().multiplyScalar(spec.maxRange));
@@ -1347,6 +1507,31 @@ function Game({
           if (practiceStatsRef) practiceStatsRef.current.hits += 1;
           player.current.kills += 1;
           onKillFeed("Target down");
+        }
+      }
+
+      // Horror: shoot the monsters
+      const hs = horrorRef?.current;
+      if (hs && hs.phase === "arena") {
+        let bestM: Monster | null = null;
+        let bestMD = Infinity;
+        for (const m of hs.monsters) {
+          if (!m.alive) continue;
+          const sphere = new THREE.Sphere(new THREE.Vector3(m.x, 1.1, m.z), 1.0);
+          const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
+          if (hit) {
+            const d = hit.distanceTo(origin);
+            if (d < bestMD) { bestMD = d; bestM = m; }
+          }
+        }
+        if (bestM) {
+          bestM.hp -= Math.max(10, spec.damage);
+          bestM.lastHitAt = now;
+          if (bestM.hp <= 0) {
+            bestM.alive = false;
+            hs.kills += 1;
+            onKillFeed(`Monster purged (${hs.kills}/${hs.target})`);
+          }
         }
       }
     }
@@ -1726,3 +1911,246 @@ const WEAPON_MODELS: Record<WeaponId, React.ReactNode> = {
     </group>
   ),
 };
+// ===== Flashlight (horror mode) =====
+function Flashlight() {
+  const light = useRef<THREE.SpotLight>(null);
+  const target = useRef<THREE.Object3D>(new THREE.Object3D());
+  const { camera, scene } = useThree();
+  useEffect(() => {
+    scene.add(target.current);
+    return () => { scene.remove(target.current); };
+  }, [scene]);
+  useFrame(({ clock }) => {
+    if (!light.current) return;
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    light.current.position.copy(camera.position);
+    target.current.position.copy(camera.position).addScaledVector(dir, 12);
+    light.current.target = target.current;
+    // flicker
+    const t = clock.getElapsedTime();
+    light.current.intensity = 22 + Math.sin(t * 31) * 3 + (Math.random() < 0.01 ? -16 : 0);
+  });
+  return (
+    <>
+      <spotLight ref={light} angle={0.55} penumbra={0.7} distance={26} decay={1.6} color="#ffeccc" castShadow={false} />
+      <pointLight color="#ff2244" intensity={0.6} distance={6} />
+    </>
+  );
+}
+
+// ===== Portals =====
+export function PortalsView({ portalsRef }: { portalsRef: React.MutableRefObject<PortalsState> }) {
+  const a = useRef<THREE.Group>(null);
+  const b = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const p = portalsRef.current;
+    for (const [ref, portal] of [[a, p.a], [b, p.b]] as const) {
+      if (!ref.current) continue;
+      ref.current.visible = !!portal;
+      if (portal) {
+        ref.current.position.set(portal.x, portal.y + 0.02, portal.z);
+        ref.current.rotation.y = t * 1.6;
+        ref.current.scale.setScalar(1 + Math.sin(t * 4) * 0.05);
+      }
+    }
+  });
+  const ring = (color: string, ref: React.RefObject<THREE.Group>) => (
+    <group ref={ref} visible={false}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.2, 0.14, 12, 40]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+        <circleGeometry args={[1.15, 40]} />
+        <meshBasicMaterial color={color} transparent opacity={0.35} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+      <pointLight color={color} intensity={4} distance={7} position={[0, 1, 0]} />
+    </group>
+  );
+  return (
+    <group>
+      {ring("#3b82f6", a)}
+      {ring("#f97316", b)}
+    </group>
+  );
+}
+
+// ===== Secret horror world =====
+function MonsterMesh({ monster }: { monster: Monster }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (!g.current) return;
+    const m = monster;
+    g.current.visible = m.alive;
+    if (!m.alive) return;
+    const t = clock.getElapsedTime() + m.seed;
+    g.current.position.set(m.x, Math.abs(Math.sin(t * 6)) * 0.12, m.z);
+    g.current.rotation.y += 0; // faced via lookAt below
+    g.current.rotation.z = Math.sin(t * 9) * 0.05;
+    const hurt = performance.now() - m.lastHitAt < 120;
+    g.current.scale.setScalar(hurt ? 1.12 : 1);
+  });
+  return (
+    <group ref={g}>
+      {/* gaunt torso */}
+      <mesh position={[0, 1.15, 0]} castShadow>
+        <boxGeometry args={[0.7, 1.1, 0.42]} />
+        <meshStandardMaterial color="#141018" roughness={1} />
+      </mesh>
+      {/* head */}
+      <mesh position={[0, 1.95, 0]} castShadow>
+        <boxGeometry args={[0.55, 0.55, 0.55]} />
+        <meshStandardMaterial color="#1c1620" roughness={1} />
+      </mesh>
+      {/* eyes */}
+      {[-0.14, 0.14].map((x) => (
+        <mesh key={x} position={[x, 2.0, 0.29]}>
+          <sphereGeometry args={[0.07, 10, 10]} />
+          <meshBasicMaterial color="#ff1a1a" toneMapped={false} />
+        </mesh>
+      ))}
+      <pointLight position={[0, 2, 0.3]} color="#ff0000" intensity={1.4} distance={3.2} />
+      {/* mouth with teeth */}
+      <mesh position={[0, 1.78, 0.28]}>
+        <boxGeometry args={[0.36, 0.16, 0.04]} />
+        <meshBasicMaterial color="#2a0000" toneMapped={false} />
+      </mesh>
+      {[-0.12, -0.04, 0.04, 0.12].map((x) => (
+        <mesh key={x} position={[x, 1.78, 0.3]} rotation={[Math.PI, 0, 0]}>
+          <coneGeometry args={[0.03, 0.12, 4]} />
+          <meshBasicMaterial color="#e7e0d0" toneMapped={false} />
+        </mesh>
+      ))}
+      {/* long arms */}
+      {[-0.5, 0.5].map((x) => (
+        <mesh key={x} position={[x, 1.0, 0]} rotation={[0.25, 0, x > 0 ? -0.12 : 0.12]} castShadow>
+          <boxGeometry args={[0.16, 1.5, 0.16]} />
+          <meshStandardMaterial color="#0f0c12" roughness={1} />
+        </mesh>
+      ))}
+      {/* legs */}
+      {[-0.2, 0.2].map((x) => (
+        <mesh key={x} position={[x, 0.35, 0]} castShadow>
+          <boxGeometry args={[0.2, 0.75, 0.2]} />
+          <meshStandardMaterial color="#0f0c12" roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function MonstersView({ horrorRef }: { horrorRef: React.MutableRefObject<HorrorState | null> }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => force((n) => n + 1), 400);
+    return () => clearInterval(i);
+  }, []);
+  const hs = horrorRef.current;
+  if (!hs) return null;
+  return (
+    <group>
+      {hs.monsters.filter((m) => m.alive).map((m) => <MonsterMesh key={m.id} monster={m} />)}
+      {hs.phase !== "arena" && hs.hallwayMonster && <HallwayStalker horrorRef={horrorRef} />}
+    </group>
+  );
+}
+
+function HallwayStalker({ horrorRef }: { horrorRef: React.MutableRefObject<HorrorState | null> }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(({ camera }) => {
+    const hm = horrorRef.current?.hallwayMonster;
+    if (!g.current || !hm) return;
+    g.current.position.set(hm.x, 0, hm.z);
+    g.current.lookAt(camera.position.x, 0, camera.position.z);
+  });
+  const monster: Monster = { id: -1, x: 0, z: 0, hp: 1, alive: true, seed: 3, spawnAt: 0, lastHitAt: 0 };
+  return (
+    <group ref={g}>
+      <group scale={1.35}>
+        <MonsterStatic monster={monster} />
+      </group>
+    </group>
+  );
+}
+
+function MonsterStatic({ monster }: { monster: Monster }) {
+  // same visual body, but positioned by the parent group
+  return (
+    <group>
+      <mesh position={[0, 1.15, 0]}><boxGeometry args={[0.7, 1.1, 0.42]} /><meshStandardMaterial color="#141018" roughness={1} /></mesh>
+      <mesh position={[0, 1.95, 0]}><boxGeometry args={[0.55, 0.55, 0.55]} /><meshStandardMaterial color="#1c1620" roughness={1} /></mesh>
+      {[-0.14, 0.14].map((x) => (
+        <mesh key={x} position={[x, 2.0, 0.29]}><sphereGeometry args={[0.08, 10, 10]} /><meshBasicMaterial color="#ff1a1a" toneMapped={false} /></mesh>
+      ))}
+      <pointLight position={[0, 2, 0.3]} color="#ff0000" intensity={2} distance={4} />
+      {[-0.5, 0.5].map((x) => (
+        <mesh key={x} position={[x, 1.0, 0]} rotation={[0.3, 0, x > 0 ? -0.1 : 0.1]}><boxGeometry args={[0.16, 1.6, 0.16]} /><meshStandardMaterial color="#0f0c12" roughness={1} /></mesh>
+      ))}
+      {[-0.2, 0.2].map((x) => (
+        <mesh key={x} position={[x, 0.35, 0]}><boxGeometry args={[0.2, 0.75, 0.2]} /><meshStandardMaterial color="#0f0c12" roughness={1} /></mesh>
+      ))}
+      {void monster}
+    </group>
+  );
+}
+
+export function HorrorWorld({ horrorRef }: { horrorRef: React.MutableRefObject<HorrorState | null> }) {
+  const [phase, setPhase] = useState<HorrorState["phase"]>(horrorRef.current?.phase ?? "arena");
+  useEffect(() => {
+    const i = setInterval(() => {
+      const p = horrorRef.current?.phase;
+      if (p) setPhase(p);
+    }, 300);
+    return () => clearInterval(i);
+  }, [horrorRef]);
+  return (
+    <group>
+      {phase === "arena" ? (
+        <group>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[ARENA * 2, ARENA * 2]} />
+            <meshStandardMaterial color="#0a0810" roughness={1} />
+          </mesh>
+          {[
+            [0, ARENA, ARENA * 2, 1],
+            [0, -ARENA, ARENA * 2, 1],
+            [ARENA, 0, 1, ARENA * 2],
+            [-ARENA, 0, 1, ARENA * 2],
+          ].map(([x, z, w, d], i) => (
+            <mesh key={i} position={[x as number, 2, z as number]}>
+              <boxGeometry args={[w as number, 4, d as number]} />
+              <meshStandardMaterial color="#0d0a12" roughness={1} />
+            </mesh>
+          ))}
+        </group>
+      ) : (
+        <group>
+          {/* narrow hallway */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+            <planeGeometry args={[4.4, 70]} />
+            <meshStandardMaterial color="#181410" roughness={1} />
+          </mesh>
+          <mesh position={[0, 3.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[4.4, 70]} />
+            <meshStandardMaterial color="#0e0b09" roughness={1} />
+          </mesh>
+          {[-2.2, 2.2].map((x) => (
+            <mesh key={x} position={[x, 1.6, 0]}>
+              <boxGeometry args={[0.2, 3.2, 70]} />
+              <meshStandardMaterial color="#221a14" roughness={1} />
+            </mesh>
+          ))}
+          {[-24, -12, 0, 12, 24].map((z) => (
+            <group key={z} position={[0, 3.0, z]}>
+              <mesh><boxGeometry args={[0.7, 0.1, 0.2]} /><meshBasicMaterial color="#ffd9a0" toneMapped={false} /></mesh>
+              <pointLight color="#ffb060" intensity={2.2} distance={9} />
+            </group>
+          ))}
+        </group>
+      )}
+      <MonstersView horrorRef={horrorRef} />
+    </group>
+  );
+}
