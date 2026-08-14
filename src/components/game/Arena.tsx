@@ -1509,6 +1509,31 @@ function Game({
           onKillFeed("Target down");
         }
       }
+
+      // Horror: shoot the monsters
+      const hs = horrorRef?.current;
+      if (hs && hs.phase === "arena") {
+        let bestM: Monster | null = null;
+        let bestMD = Infinity;
+        for (const m of hs.monsters) {
+          if (!m.alive) continue;
+          const sphere = new THREE.Sphere(new THREE.Vector3(m.x, 1.1, m.z), 1.0);
+          const hit = ray.ray.intersectSphere(sphere, new THREE.Vector3());
+          if (hit) {
+            const d = hit.distanceTo(origin);
+            if (d < bestMD) { bestMD = d; bestM = m; }
+          }
+        }
+        if (bestM) {
+          bestM.hp -= Math.max(10, spec.damage);
+          bestM.lastHitAt = now;
+          if (bestM.hp <= 0) {
+            bestM.alive = false;
+            hs.kills += 1;
+            onKillFeed(`Monster purged (${hs.kills}/${hs.target})`);
+          }
+        }
+      }
     }
 
     // Broadcast pose ~15Hz
