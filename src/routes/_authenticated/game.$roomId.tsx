@@ -1255,6 +1255,10 @@ function Game() {
         onEnterExitCar={setDrivingTeam}
         thirdPerson={thirdPerson}
         weapon={weapon}
+        portalsRef={portalsRef}
+        horror={isHorror}
+        horrorRef={isHorror ? horrorRef : undefined}
+        onJumpscare={() => setJumpscare(Date.now())}
       />
 
       {/* HUD */}
