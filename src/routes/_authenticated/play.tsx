@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon } from "lucide-react";
+import { Ghost, Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { GameSettings } from "@/components/game/GameSettings";
