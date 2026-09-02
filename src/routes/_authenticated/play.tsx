@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon } from "lucide-react";
+import { Ghost, Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { GameSettings } from "@/components/game/GameSettings";
@@ -562,6 +562,23 @@ function PlayLobby() {
             className="mt-5 h-12 w-full bg-sky-400 font-bold uppercase tracking-widest text-black hover:bg-sky-400/90"
           >
             Enter free play
+          </Button>
+        </div>
+
+        <div className="mt-6 rounded-xl border-2 border-red-900/70 bg-gradient-to-br from-red-950/60 to-black p-6 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <Ghost className="size-5 text-red-400" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wider text-red-300">The Dark — Horror mode</h2>
+            <span className="ml-auto rounded-full bg-red-700 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Secret</span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Lights out. You get one handgun and a flashlight — nothing else. Survive the things in the dark.
+          </p>
+          <Button
+            onClick={() => navigate({ to: "/game/$roomId", params: { roomId: "HORROR" } })}
+            className="mt-5 h-12 w-full bg-red-700 font-bold uppercase tracking-widest text-white hover:bg-red-700/90"
+          >
+            <Ghost className="mr-2 size-4" /> Enter the dark
           </Button>
         </div>
 

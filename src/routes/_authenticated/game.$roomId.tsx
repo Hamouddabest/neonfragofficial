@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, type CarsState, type CarEvent, WEAPONS, makeCTFState, makeCars, CAR_SPAWNS, CAR_BLAST_RADIUS, CAR_RESPAWN_MS, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
-import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Flame, Gamepad2, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Swords, Target, Rocket, Users, Video, Wand2, X, Zap } from "lucide-react";
+import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type ShotEvent, type CustomArena, type WeaponId, type Rank, type LocalOps, type LocalPos, type CTFState, type FlagEvent, type Team, type Quality, type PracticeStats, type CarsState, type CarEvent, type PortalsState, type HorrorState, WEAPONS, makeCTFState, makeCars, makePortals, makeHorror, HORROR_TARGET, CAR_SPAWNS, CAR_BLAST_RADIUS, CAR_RESPAWN_MS, CTF_BASES, CTF_SCORE_LIMIT, TEAM_COLORS } from "@/components/game/Arena";
+import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Flame, Flashlight, Gamepad2, Ghost, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Swords, Target, Rocket, Users, Video, Wand2, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -79,14 +79,38 @@ function Game() {
   useEffect(() => { myRankRef.current = myRank; }, [myRank]);
   const isCTF = roomId === "CTF" || roomId.startsWith("CTF-");
   const isPractice = roomId === "PRACTICE";
-  const mode = isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
-  const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false });
+  const isHorror = roomId === "HORROR" || roomId.startsWith("HORROR-");
+  const mode = isHorror ? "The Dark — Survival" : isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
+  const startWeapon: WeaponId = isCTF || isHorror ? "pistol" : "rifle";
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false, sprint: false, portalSlot: 1 as 1 | 2 });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
   const [thirdPerson, setThirdPerson] = useState(false);
+  const [portalSlotState, setPortalSlotState] = useState<1 | 2>(1);
+  const portalsRef = useRef<PortalsState>(makePortals());
+  const horrorRef = useRef<HorrorState | null>(isHorror ? makeHorror() : null);
+  const [horrorHud, setHorrorHud] = useState({ kills: 0, target: HORROR_TARGET, phase: "arena" as HorrorState["phase"] });
+  const [jumpscare, setJumpscare] = useState(false);
+  const jumpscareTimer = useRef<number | null>(null);
+  function triggerJumpscare() {
+    setJumpscare(true);
+    if (jumpscareTimer.current) window.clearTimeout(jumpscareTimer.current);
+    jumpscareTimer.current = window.setTimeout(() => setJumpscare(false), 900);
+  }
+  useEffect(() => {
+    if (!isHorror) return;
+    const t = window.setInterval(() => {
+      const h = horrorRef.current;
+      if (h) setHorrorHud({ kills: h.kills, target: h.target, phase: h.phase });
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [isHorror]);
+  function setPortalSlot(s: 1 | 2) {
+    controls.current.portalSlot = s;
+    setPortalSlotState(s);
+  }
   function selectWeapon(w: WeaponId) {
-    if (isCTF) return; // pistol only
+    if (isCTF || isHorror) return; // pistol only
     controls.current.weapon = w;
     setWeaponState(w);
   }
@@ -1158,11 +1182,15 @@ function Game() {
       if (k === "6") selectWeapon("flamethrower");
       if (k === "7") selectWeapon("portalgun");
       if (k === "v") setThirdPerson((v) => !v);
+      if (k === "q") setPortalSlot(1);
+      if (k === "z") setPortalSlot(2);
+      if (e.shiftKey) controls.current.sprint = true;
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       keys[k] = false;
+      if (k === "shift") controls.current.sprint = false;
       if (["w", "a", "s", "d"].includes(k)) updateMove();
     };
     const onMouseMove = (e: MouseEvent) => {
@@ -1233,6 +1261,10 @@ function Game() {
         onEnterExitCar={setDrivingTeam}
         thirdPerson={thirdPerson}
         weapon={weapon}
+        portalsRef={portalsRef}
+        horror={isHorror}
+        horrorRef={isHorror ? horrorRef : undefined}
+        onJumpscare={triggerJumpscare}
       />
 
       {/* HUD */}
@@ -1379,8 +1411,48 @@ function Game() {
         </div>
       </div>
 
+      {/* Portal slot picker */}
+      {weapon === "portalgun" && !isCTF && !isHorror && (
+        <div className="pointer-events-auto absolute left-1/2 bottom-20 z-20 -translate-x-1/2 flex gap-2">
+          {([1, 2] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setPortalSlot(s)}
+              className={`rounded-md border px-4 py-2 font-display text-xs font-bold uppercase tracking-widest backdrop-blur ${
+                portalSlotState === s
+                  ? "border-[#a855f7] bg-[#a855f7]/30 text-[#e9d5ff] shadow-[0_0_16px_#a855f7]"
+                  : "border-border bg-black/60 text-muted-foreground"
+              }`}
+              title={`Place Portal ${s} (${s === 1 ? "Q" : "Z"})`}
+            >
+              Portal {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Horror HUD */}
+      {isHorror && (
+        <>
+          <div className="pointer-events-none absolute left-1/2 bottom-4 z-20 -translate-x-1/2 flex items-center gap-3 rounded-md border border-[#7f1d1d] bg-black/70 px-4 py-2 backdrop-blur">
+            <span className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-[#fca5a5]">
+              <Ghost className="size-4" /> {horrorHud.phase === "hallway" ? "It's behind the door…" : `${horrorHud.kills}/${horrorHud.target}`}
+            </span>
+            <span className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-[#fde68a]">
+              <Flashlight className="size-4" /> On
+            </span>
+            <span className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-muted-foreground">
+              <Zap className="size-4" /> Handgun
+            </span>
+          </div>
+          {jumpscare && (
+            <div className="pointer-events-none absolute inset-0 z-40 animate-pulse bg-red-700/50" />
+          )}
+        </>
+      )}
+
       {/* Weapon selector */}
-      {!isCTF && (
+      {!isCTF && !isHorror && (
       <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex max-w-[92vw] flex-wrap justify-center gap-1.5">
         {WEAPON_ORDER.map((w, i) => {
           const Icon = WEAPON_ICONS[w];
