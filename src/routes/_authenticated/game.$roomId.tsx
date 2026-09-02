@@ -79,14 +79,32 @@ function Game() {
   useEffect(() => { myRankRef.current = myRank; }, [myRank]);
   const isCTF = roomId === "CTF" || roomId.startsWith("CTF-");
   const isPractice = roomId === "PRACTICE";
-  const mode = isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
-  const startWeapon: WeaponId = isCTF ? "pistol" : "rifle";
-  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false });
+  const isHorror = roomId === "HORROR" || roomId.startsWith("HORROR-");
+  const mode = isHorror ? "The Dark — Survival" : isPractice ? "Free Play — Aim Trainer" : isCTF ? "Capture the Flag" : roomId === "FFA" ? "Free-for-All" : `Room ${roomId}`;
+  const startWeapon: WeaponId = isCTF || isHorror ? "pistol" : "rifle";
+  const controls = useRef({ moveX: 0, moveY: 0, yaw: 0, pitch: 0, fire: false, reload: false, jump: false, weapon: startWeapon as WeaponId, zoom: false, interact: false, sprint: false, portalSlot: 1 as 1 | 2 });
   const [hud, setHud] = useState<GameState>({ hp: 100, kills: 0, deaths: 0, ammo: 12, maxAmmo: 12, weapon: startWeapon, reloading: false });
   const [weapon, setWeaponState] = useState<WeaponId>(startWeapon);
   const [thirdPerson, setThirdPerson] = useState(false);
+  const [portalSlotState, setPortalSlotState] = useState<1 | 2>(1);
+  const portalsRef = useRef<PortalsState>(makePortals());
+  const horrorRef = useRef<HorrorState | null>(isHorror ? makeHorror() : null);
+  const [horrorHud, setHorrorHud] = useState({ kills: 0, target: HORROR_TARGET, phase: "arena" as HorrorState["phase"] });
+  const [jumpscare, setJumpscare] = useState(0);
+  useEffect(() => {
+    if (!isHorror) return;
+    const t = window.setInterval(() => {
+      const h = horrorRef.current;
+      if (h) setHorrorHud({ kills: h.kills, target: h.target, phase: h.phase });
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [isHorror]);
+  function setPortalSlot(s: 1 | 2) {
+    controls.current.portalSlot = s;
+    setPortalSlotState(s);
+  }
   function selectWeapon(w: WeaponId) {
-    if (isCTF) return; // pistol only
+    if (isCTF || isHorror) return; // pistol only
     controls.current.weapon = w;
     setWeaponState(w);
   }
