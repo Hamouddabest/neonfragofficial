@@ -1956,7 +1956,7 @@ export function PortalsView({ portalsRef }: { portalsRef: React.MutableRefObject
       }
     }
   });
-  const ring = (color: string, ref: React.RefObject<THREE.Group>) => (
+  const ring = (color: string, ref: React.RefObject<THREE.Group | null>) => (
     <group ref={ref} visible={false}>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <torusGeometry args={[1.2, 0.14, 12, 40]} />
