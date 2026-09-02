@@ -1405,8 +1405,48 @@ function Game() {
         </div>
       </div>
 
+      {/* Portal slot picker */}
+      {weapon === "portalgun" && !isCTF && !isHorror && (
+        <div className="pointer-events-auto absolute left-1/2 bottom-20 z-20 -translate-x-1/2 flex gap-2">
+          {([1, 2] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setPortalSlot(s)}
+              className={`rounded-md border px-4 py-2 font-display text-xs font-bold uppercase tracking-widest backdrop-blur ${
+                portalSlotState === s
+                  ? "border-[#a855f7] bg-[#a855f7]/30 text-[#e9d5ff] shadow-[0_0_16px_#a855f7]"
+                  : "border-border bg-black/60 text-muted-foreground"
+              }`}
+              title={`Place Portal ${s} (${s === 1 ? "Q" : "Z"})`}
+            >
+              Portal {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Horror HUD */}
+      {isHorror && (
+        <>
+          <div className="pointer-events-none absolute left-1/2 bottom-4 z-20 -translate-x-1/2 flex items-center gap-3 rounded-md border border-[#7f1d1d] bg-black/70 px-4 py-2 backdrop-blur">
+            <span className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-[#fca5a5]">
+              <Ghost className="size-4" /> {horrorHud.phase === "hallway" ? "It's behind the door…" : `${horrorHud.kills}/${horrorHud.target}`}
+            </span>
+            <span className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-[#fde68a]">
+              <Flashlight className="size-4" /> On
+            </span>
+            <span className="flex items-center gap-1 text-xs font-display uppercase tracking-widest text-muted-foreground">
+              <Zap className="size-4" /> Handgun
+            </span>
+          </div>
+          {Date.now() - jumpscare < 900 && (
+            <div key={jumpscare} className="pointer-events-none absolute inset-0 z-40 animate-pulse bg-red-700/50" />
+          )}
+        </>
+      )}
+
       {/* Weapon selector */}
-      {!isCTF && (
+      {!isCTF && !isHorror && (
       <div className="pointer-events-auto absolute left-1/2 bottom-3 z-20 -translate-x-1/2 flex max-w-[92vw] flex-wrap justify-center gap-1.5">
         {WEAPON_ORDER.map((w, i) => {
           const Icon = WEAPON_ICONS[w];
