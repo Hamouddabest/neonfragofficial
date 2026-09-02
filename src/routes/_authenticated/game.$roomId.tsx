@@ -1158,11 +1158,15 @@ function Game() {
       if (k === "6") selectWeapon("flamethrower");
       if (k === "7") selectWeapon("portalgun");
       if (k === "v") setThirdPerson((v) => !v);
+      if (k === "q") setPortalSlot(1);
+      if (k === "z") setPortalSlot(2);
+      if (e.shiftKey) controls.current.sprint = true;
       if (["w", "a", "s", "d"].includes(k)) { e.preventDefault(); updateMove(); }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       keys[k] = false;
+      if (k === "shift") controls.current.sprint = false;
       if (["w", "a", "s", "d"].includes(k)) updateMove();
     };
     const onMouseMove = (e: MouseEvent) => {
