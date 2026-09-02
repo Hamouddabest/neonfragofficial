@@ -90,7 +90,13 @@ function Game() {
   const portalsRef = useRef<PortalsState>(makePortals());
   const horrorRef = useRef<HorrorState | null>(isHorror ? makeHorror() : null);
   const [horrorHud, setHorrorHud] = useState({ kills: 0, target: HORROR_TARGET, phase: "arena" as HorrorState["phase"] });
-  const [jumpscare, setJumpscare] = useState(0);
+  const [jumpscare, setJumpscare] = useState(false);
+  const jumpscareTimer = useRef<number | null>(null);
+  function triggerJumpscare() {
+    setJumpscare(true);
+    if (jumpscareTimer.current) window.clearTimeout(jumpscareTimer.current);
+    jumpscareTimer.current = window.setTimeout(() => setJumpscare(false), 900);
+  }
   useEffect(() => {
     if (!isHorror) return;
     const t = window.setInterval(() => {
@@ -1258,7 +1264,7 @@ function Game() {
         portalsRef={portalsRef}
         horror={isHorror}
         horrorRef={isHorror ? horrorRef : undefined}
-        onJumpscare={() => setJumpscare(Date.now())}
+        onJumpscare={triggerJumpscare}
       />
 
       {/* HUD */}
@@ -1439,8 +1445,8 @@ function Game() {
               <Zap className="size-4" /> Handgun
             </span>
           </div>
-          {Date.now() - jumpscare < 900 && (
-            <div key={jumpscare} className="pointer-events-none absolute inset-0 z-40 animate-pulse bg-red-700/50" />
+          {jumpscare && (
+            <div className="pointer-events-none absolute inset-0 z-40 animate-pulse bg-red-700/50" />
           )}
         </>
       )}
