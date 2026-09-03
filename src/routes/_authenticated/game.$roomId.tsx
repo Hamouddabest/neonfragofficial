@@ -1492,7 +1492,17 @@ function Game() {
             </span>
           </div>
           {jumpscare && (
-            <div className="pointer-events-none absolute inset-0 z-40 animate-pulse bg-red-700/50" />
+            <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden bg-black jumpscare-shake">
+              <img
+                src={jumpscareFace}
+                alt=""
+                width={1024}
+                height={1024}
+                className="jumpscare-face h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-red-800/30 mix-blend-hard-light" />
+            </div>
+
           )}
         </>
       )}
