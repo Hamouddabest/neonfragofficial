@@ -1179,10 +1179,11 @@ function Game({
     if (horror) {
       const pp = player.current.pos;
       if (horror.phase === "arena") {
-        const maxAlive = 3 + Math.floor(horror.kills / 6);
+        // Starts with 1 monster; every kill adds one more, capped at 20 total.
+        const maxAlive = Math.min(HORROR_TARGET, 1 + horror.kills);
         const alive = horror.monsters.filter((m) => m.alive).length;
         if (alive < maxAlive && now > horror.nextSpawn) {
-          horror.nextSpawn = now + 2200;
+          horror.nextSpawn = now + 1400;
           const ang = Math.random() * Math.PI * 2;
           const dist = 16 + Math.random() * 10;
           horror.monsters.push({
@@ -1197,6 +1198,7 @@ function Game({
           });
           if (horror.monsters.length > 40) horror.monsters = horror.monsters.filter((m) => m.alive);
         }
+
         for (const m of horror.monsters) {
           if (!m.alive) continue;
           const dx = pp.x - m.x;
