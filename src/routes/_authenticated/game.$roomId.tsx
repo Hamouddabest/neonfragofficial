@@ -393,7 +393,50 @@ function Game() {
     if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume().catch(() => {});
     return audioCtxRef.current;
   }
+  function playScreech() {
+    try {
+      const ctx = getAudio();
+      const t = ctx.currentTime;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.7, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+      g.connect(ctx.destination);
+      const o1 = ctx.createOscillator();
+      o1.type = "sawtooth";
+      o1.frequency.setValueAtTime(1400, t);
+      o1.frequency.exponentialRampToValueAtTime(180, t + 0.9);
+      const o2 = ctx.createOscillator();
+      o2.type = "square";
+      o2.frequency.setValueAtTime(93, t);
+      o2.frequency.exponentialRampToValueAtTime(52, t + 0.9);
+      const dist = ctx.createWaveShaper();
+      const curve = new Float32Array(256);
+      for (let i = 0; i < 256; i++) { const x = (i / 128) - 1; curve[i] = Math.tanh(x * 4); }
+      dist.curve = curve;
+      dist.connect(g);
+      o1.connect(dist); o2.connect(dist);
+      o1.start(t); o2.start(t);
+      o1.stop(t + 1.0); o2.stop(t + 1.0);
+      // noise shriek layer
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.6), ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(2600, t);
+      bp.frequency.exponentialRampToValueAtTime(700, t + 0.6);
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.35, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      src.connect(bp); bp.connect(ng); ng.connect(ctx.destination);
+      src.start(t);
+    } catch { /* ignore */ }
+  }
   function playShoot() {
+
     try {
       const ctx = getAudio();
       const t = ctx.currentTime;
