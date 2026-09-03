@@ -1210,8 +1210,20 @@ function Game({
           if (d > 1.4) {
             m.x += (dx / d) * mspeed * dt;
             m.z += (dz / d) * mspeed * dt;
+            // Proximity scare: it lunges into view up close
+            if (d < 4.2 && now - lastScare.current > 5000) {
+              const look = new THREE.Vector3();
+              camera.getWorldDirection(look);
+              const to = new THREE.Vector3(-dx, 0, -dz).normalize();
+              if (look.setY(0).normalize().dot(to) > 0.6) {
+                lastScare.current = now;
+                horror.jumpscareAt = now;
+                onJumpscare?.();
+              }
+            }
           } else if (now - lastMonsterHit.current > 1100 && player.current.hp > 0) {
             lastMonsterHit.current = now;
+            lastScare.current = now;
             horror.jumpscareAt = now;
             onJumpscare?.();
             if (!(localOpsRef?.current.god ?? false)) player.current.hp -= 14;
@@ -1219,6 +1231,7 @@ function Game({
             m.x -= (dx / d) * 2.2;
             m.z -= (dz / d) * 2.2;
           }
+
         }
         if (horror.kills >= horror.target) {
           horror.phase = "hallway";
