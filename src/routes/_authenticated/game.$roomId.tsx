@@ -94,9 +94,12 @@ function Game() {
   const jumpscareTimer = useRef<number | null>(null);
   function triggerJumpscare() {
     setJumpscare(true);
+    playScreech();
+    try { navigator.vibrate?.([80, 40, 160]); } catch { /* ignore */ }
     if (jumpscareTimer.current) window.clearTimeout(jumpscareTimer.current);
-    jumpscareTimer.current = window.setTimeout(() => setJumpscare(false), 900);
+    jumpscareTimer.current = window.setTimeout(() => setJumpscare(false), 1100);
   }
+
   useEffect(() => {
     if (!isHorror) return;
     const t = window.setInterval(() => {
