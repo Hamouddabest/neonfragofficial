@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Room, RoomEvent, Track, RemoteAudioTrack, type LocalAudioTrack, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
 import { getLiveKitToken, getLiveKitTokenPublic } from "@/lib/livekit.functions";
 
+import jumpscareFace from "@/assets/jumpscare.jpg";
 const OWNER_EMAIL = "totallybro541@gmail.com";
 
 type CrosshairCfg = { size: number; gap: number; thickness: number; color: string; dot: boolean; outline: boolean };
