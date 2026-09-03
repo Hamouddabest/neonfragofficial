@@ -933,6 +933,8 @@ function Game({
   const prevCarAlive = useRef<Record<Team, boolean>>({ red: true, blue: true });
   const portalCooldown = useRef(0);
   const lastMonsterHit = useRef(0);
+  const lastScare = useRef(0);
+
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
