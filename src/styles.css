@@ -183,3 +183,21 @@
     oklch(1 0 0 / 0.025) 3px
   );
 }
+
+@keyframes jumpscare-shake {
+  0% { transform: translate3d(0, 0, 0) scale(1.15); }
+  20% { transform: translate3d(-14px, 8px, 0) scale(1.22); }
+  40% { transform: translate3d(12px, -10px, 0) scale(1.12); }
+  60% { transform: translate3d(-9px, -6px, 0) scale(1.25); }
+  80% { transform: translate3d(10px, 7px, 0) scale(1.14); }
+  100% { transform: translate3d(0, 0, 0) scale(1.2); }
+}
+@keyframes jumpscare-flicker {
+  0% { opacity: 0; filter: contrast(2) brightness(2.4); }
+  8% { opacity: 1; filter: contrast(1.6) brightness(1.6); }
+  30% { opacity: 0.85; filter: contrast(1.9) brightness(1.1); }
+  55% { opacity: 1; filter: contrast(1.4) brightness(1.3); }
+  100% { opacity: 1; filter: contrast(1.5) brightness(1); }
+}
+.jumpscare-shake { animation: jumpscare-shake 0.28s linear infinite; }
+.jumpscare-face { animation: jumpscare-flicker 0.5s steps(6, end) 1 both; }

@@ -933,6 +933,8 @@ function Game({
   const prevCarAlive = useRef<Record<Team, boolean>>({ red: true, blue: true });
   const portalCooldown = useRef(0);
   const lastMonsterHit = useRef(0);
+  const lastScare = useRef(0);
+
 
   useEffect(() => {
     camera.position.copy(player.current.pos);
@@ -1179,10 +1181,11 @@ function Game({
     if (horror) {
       const pp = player.current.pos;
       if (horror.phase === "arena") {
-        const maxAlive = 3 + Math.floor(horror.kills / 6);
+        // Starts with 1 monster; every kill adds one more, capped at 20 total.
+        const maxAlive = Math.min(HORROR_TARGET, 1 + horror.kills);
         const alive = horror.monsters.filter((m) => m.alive).length;
         if (alive < maxAlive && now > horror.nextSpawn) {
-          horror.nextSpawn = now + 2200;
+          horror.nextSpawn = now + 1400;
           const ang = Math.random() * Math.PI * 2;
           const dist = 16 + Math.random() * 10;
           horror.monsters.push({
@@ -1197,6 +1200,7 @@ function Game({
           });
           if (horror.monsters.length > 40) horror.monsters = horror.monsters.filter((m) => m.alive);
         }
+
         for (const m of horror.monsters) {
           if (!m.alive) continue;
           const dx = pp.x - m.x;
@@ -1206,8 +1210,20 @@ function Game({
           if (d > 1.4) {
             m.x += (dx / d) * mspeed * dt;
             m.z += (dz / d) * mspeed * dt;
+            // Proximity scare: it lunges into view up close
+            if (d < 4.2 && now - lastScare.current > 5000) {
+              const look = new THREE.Vector3();
+              camera.getWorldDirection(look);
+              const to = new THREE.Vector3(-dx, 0, -dz).normalize();
+              if (look.setY(0).normalize().dot(to) > 0.6) {
+                lastScare.current = now;
+                horror.jumpscareAt = now;
+                onJumpscare?.();
+              }
+            }
           } else if (now - lastMonsterHit.current > 1100 && player.current.hp > 0) {
             lastMonsterHit.current = now;
+            lastScare.current = now;
             horror.jumpscareAt = now;
             onJumpscare?.();
             if (!(localOpsRef?.current.god ?? false)) player.current.hp -= 14;
@@ -1215,6 +1231,7 @@ function Game({
             m.x -= (dx / d) * 2.2;
             m.z -= (dz / d) * 2.2;
           }
+
         }
         if (horror.kills >= horror.target) {
           horror.phase = "hallway";
