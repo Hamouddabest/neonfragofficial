@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      cosmetic_catalog: {
+        Row: {
+          config: Json
+          id: string
+          name: string
+          price: number
+          rarity: string
+          slot: string
+          sort_order: number
+        }
+        Insert: {
+          config?: Json
+          id: string
+          name: string
+          price?: number
+          rarity?: string
+          slot: string
+          sort_order?: number
+        }
+        Update: {
+          config?: Json
+          id?: string
+          name?: string
+          price?: number
+          rarity?: string
+          slot?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       custom_arenas: {
         Row: {
           blocks: Json
@@ -53,6 +83,33 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_cosmetics: {
+        Row: {
+          config: Json
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          slot: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          slot: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          slot?: string
+        }
+        Relationships: []
+      }
       match_history: {
         Row: {
           deaths: number
@@ -83,6 +140,42 @@ export type Database = {
         }
         Relationships: []
       }
+      player_cosmetics: {
+        Row: {
+          acquired_at: string
+          item_id: string
+          user_id: string
+        }
+        Insert: {
+          acquired_at?: string
+          item_id: string
+          user_id: string
+        }
+        Update: {
+          acquired_at?: string
+          item_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      player_loadout: {
+        Row: {
+          skin: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          skin?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          skin?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       player_stats: {
         Row: {
           deaths: number
@@ -105,6 +198,30 @@ export type Database = {
           kills?: number
           matches_played?: number
           playtime_seconds?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      player_wallets: {
+        Row: {
+          coins: number
+          last_daily: string | null
+          streak: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          coins?: number
+          last_daily?: string | null
+          streak?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          coins?: number
+          last_daily?: string | null
+          streak?: number
           updated_at?: string
           user_id?: string
         }
@@ -160,9 +277,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      award_play_coins: { Args: { _amount: number }; Returns: number }
       check_username_available: {
         Args: { candidate: string }
         Returns: boolean
+      }
+      claim_daily_reward: { Args: never; Returns: Json }
+      craft_custom_cosmetic: {
+        Args: { _config: Json; _name: string; _slot: string }
+        Returns: Json
+      }
+      ensure_wallet: {
+        Args: never
+        Returns: {
+          coins: number
+          last_daily: string | null
+          streak: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "player_wallets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       has_role: {
         Args: {
@@ -172,6 +311,7 @@ export type Database = {
         Returns: boolean
       }
       is_game_owner: { Args: { uid: string }; Returns: boolean }
+      purchase_cosmetic: { Args: { _item_id: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

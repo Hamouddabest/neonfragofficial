@@ -3,6 +3,7 @@ import { Sky, Text, Billboard } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { HatShape, PlayerSkin } from "@/lib/cosmetics";
 
 const ARENA = 30;
 const EYE = 1.6;
@@ -213,6 +214,7 @@ export type RemotePlayer = {
   rank?: Rank;
   team?: Team;
   carrying?: Team | null;
+  skin?: PlayerSkin | null;
 };
 
 export type PlayerPose = {
@@ -225,6 +227,7 @@ export type PlayerPose = {
   rank?: Rank;
   team?: Team;
   carrying?: Team | null;
+  skin?: PlayerSkin | null;
 };
 
 export type ShotEvent = {
@@ -672,22 +675,129 @@ function RemotePlayerView({
   );
 }
 
+/** Blocky cosmetic hats worn on top of the head. */
+function CosmeticHat({ shape, color, mat }: { shape: HatShape; color: string; mat: { metalness: number; roughness: number } }) {
+  const m = <meshStandardMaterial color={color} {...mat} />;
+  switch (shape) {
+    case "cap":
+      return (
+        <group position={[0, 1.36, 0]}>
+          <mesh castShadow><boxGeometry args={[0.6, 0.16, 0.6]} />{m}</mesh>
+          <mesh position={[0, -0.05, 0.4]} castShadow><boxGeometry args={[0.56, 0.06, 0.24]} />{m}</mesh>
+        </group>
+      );
+    case "beanie":
+      return (
+        <group position={[0, 1.38, 0]}>
+          <mesh castShadow><boxGeometry args={[0.6, 0.24, 0.6]} />{m}</mesh>
+          <mesh position={[0, 0.18, 0]}><boxGeometry args={[0.18, 0.14, 0.18]} /><meshStandardMaterial color="#ffffff" {...mat} /></mesh>
+        </group>
+      );
+    case "bucket":
+      return (
+        <group position={[0, 1.36, 0]}>
+          <mesh castShadow><boxGeometry args={[0.58, 0.2, 0.58]} />{m}</mesh>
+          <mesh position={[0, -0.09, 0]}><boxGeometry args={[0.86, 0.06, 0.86]} />{m}</mesh>
+        </group>
+      );
+    case "headphones":
+      return (
+        <group position={[0, 1.16, 0]}>
+          <mesh position={[0, 0.24, 0]}><boxGeometry args={[0.66, 0.08, 0.14]} />{m}</mesh>
+          <mesh position={[0.33, 0, 0]}><boxGeometry args={[0.1, 0.28, 0.28]} />{m}</mesh>
+          <mesh position={[-0.33, 0, 0]}><boxGeometry args={[0.1, 0.28, 0.28]} />{m}</mesh>
+        </group>
+      );
+    case "visor":
+      return (
+        <group position={[0, 1.1, 0.3]}>
+          <mesh><boxGeometry args={[0.6, 0.16, 0.06]} /><meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.1} toneMapped={false} /></mesh>
+        </group>
+      );
+    case "cowboy":
+      return (
+        <group position={[0, 1.36, 0]}>
+          <mesh castShadow><boxGeometry args={[0.46, 0.24, 0.46]} />{m}</mesh>
+          <mesh position={[0, -0.1, 0]}><boxGeometry args={[1.0, 0.06, 0.8]} />{m}</mesh>
+        </group>
+      );
+    case "helmet":
+      return (
+        <group position={[0, 1.32, 0]}>
+          <mesh castShadow><boxGeometry args={[0.64, 0.26, 0.64]} />{m}</mesh>
+          <mesh position={[0, -0.12, 0.3]}><boxGeometry args={[0.64, 0.08, 0.1]} />{m}</mesh>
+        </group>
+      );
+    case "tophat":
+      return (
+        <group position={[0, 1.4, 0]}>
+          <mesh position={[0, 0.2, 0]} castShadow><boxGeometry args={[0.44, 0.5, 0.44]} />{m}</mesh>
+          <mesh><boxGeometry args={[0.86, 0.06, 0.86]} />{m}</mesh>
+        </group>
+      );
+    case "horns":
+      return (
+        <group position={[0, 1.34, 0]}>
+          {[-0.24, 0.24].map((x) => (
+            <group key={x} position={[x, 0, 0]}>
+              <mesh position={[0, 0.1, 0]} castShadow><boxGeometry args={[0.14, 0.2, 0.14]} />{m}</mesh>
+              <mesh position={[x > 0 ? 0.08 : -0.08, 0.28, 0]} rotation={[0, 0, x > 0 ? -0.5 : 0.5]}><boxGeometry args={[0.1, 0.22, 0.1]} />{m}</mesh>
+            </group>
+          ))}
+        </group>
+      );
+    case "party":
+      return (
+        <mesh position={[0, 1.55, 0]} castShadow>
+          <coneGeometry args={[0.26, 0.5, 4]} />
+          <meshStandardMaterial color={color} {...mat} />
+        </mesh>
+      );
+    case "halo":
+      return (
+        <mesh position={[0, 1.72, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.28, 0.05, 6, 16]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.4} toneMapped={false} />
+        </mesh>
+      );
+    case "crown":
+      return (
+        <group position={[0, 1.42, 0]}>
+          <mesh castShadow><boxGeometry args={[0.6, 0.14, 0.6]} /><meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} metalness={0.7} roughness={0.25} /></mesh>
+          {[[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22], [0, 0]].map(([x, z], i) => (
+            <mesh key={i} position={[x as number, 0.16, z as number]}>
+              <boxGeometry args={[0.12, 0.2, 0.12]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} metalness={0.7} roughness={0.25} />
+            </mesh>
+          ))}
+        </group>
+      );
+    default:
+      return null;
+  }
+}
+
 /** Minecraft-style blocky character. Origin sits at the feet-ish (y=0 is hip). */
-function BlockyBody({
+export function BlockyBody({
   color,
   legL,
   legR,
   armL,
   armR,
+  cosmetics,
+  showGun = true,
 }: {
   color: string;
   legL?: React.RefObject<THREE.Mesh | null>;
   legR?: React.RefObject<THREE.Mesh | null>;
   armL?: React.RefObject<THREE.Mesh | null>;
   armR?: React.RefObject<THREE.Mesh | null>;
+  cosmetics?: PlayerSkin | null;
+  showGun?: boolean;
 }) {
-  const skin = "#e0ac69";
-  const pants = "#2b3a67";
+  const skin = cosmetics?.tone ?? "#e0ac69";
+  const shirt = cosmetics?.shirt ?? color;
+  const pants = cosmetics?.pants ?? "#2b3a67";
   const mat = { metalness: 0.05, roughness: 0.95 };
   return (
     <group position={[0, 0.76, 0]}>
@@ -707,18 +817,20 @@ function BlockyBody({
       {/* torso */}
       <mesh position={[0, 0.38, 0]} castShadow>
         <boxGeometry args={[0.62, 0.76, 0.32]} />
-        <meshStandardMaterial color={color} {...mat} />
+        <meshStandardMaterial color={shirt} {...mat} />
       </mesh>
       {/* head */}
       <mesh position={[0, 1.03, 0]} castShadow>
         <boxGeometry args={[0.56, 0.56, 0.56]} />
         <meshStandardMaterial color={skin} {...mat} />
       </mesh>
-      {/* hair / cap */}
+      {/* hair */}
       <mesh position={[0, 1.28, 0]} castShadow>
         <boxGeometry args={[0.58, 0.12, 0.58]} />
         <meshStandardMaterial color="#3b2a1d" {...mat} />
       </mesh>
+      {/* cosmetic hat */}
+      {cosmetics?.hat && <CosmeticHat shape={cosmetics.hat.shape} color={cosmetics.hat.color} mat={mat} />}
       {/* eyes */}
       {[-0.14, 0.14].map((x) => (
         <group key={x}>
@@ -741,18 +853,20 @@ function BlockyBody({
       <group position={[0.46, 0.7, 0]}>
         <mesh ref={armR} position={[0, -0.34, 0]} castShadow>
           <boxGeometry args={[0.28, 0.72, 0.28]} />
-          <meshStandardMaterial color={color} {...mat} />
+          <meshStandardMaterial color={shirt} {...mat} />
         </mesh>
         {/* blocky gun in right hand */}
-        <mesh position={[0, -0.62, -0.34]}>
-          <boxGeometry args={[0.14, 0.16, 0.66]} />
-          <meshStandardMaterial color="#26262e" {...mat} />
-        </mesh>
+        {showGun && (
+          <mesh position={[0, -0.62, -0.34]}>
+            <boxGeometry args={[0.14, 0.16, 0.66]} />
+            <meshStandardMaterial color="#26262e" {...mat} />
+          </mesh>
+        )}
       </group>
       <group position={[-0.46, 0.7, 0]}>
         <mesh ref={armL} position={[0, -0.34, 0]} castShadow>
           <boxGeometry args={[0.28, 0.72, 0.28]} />
-          <meshStandardMaterial color={color} {...mat} />
+          <meshStandardMaterial color={shirt} {...mat} />
         </mesh>
       </group>
     </group>
