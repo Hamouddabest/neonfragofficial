@@ -691,6 +691,7 @@ export function BlockyBody({
   showGun?: boolean;
 }) {
   const skin = cosmetics?.tone ?? "#e0ac69";
+  const shirt = cosmetics?.shirt ?? color;
   const pants = cosmetics?.pants ?? "#2b3a67";
   const mat = { metalness: 0.05, roughness: 0.95 };
   return (
@@ -747,18 +748,20 @@ export function BlockyBody({
       <group position={[0.46, 0.7, 0]}>
         <mesh ref={armR} position={[0, -0.34, 0]} castShadow>
           <boxGeometry args={[0.28, 0.72, 0.28]} />
-          <meshStandardMaterial color={color} {...mat} />
+          <meshStandardMaterial color={shirt} {...mat} />
         </mesh>
         {/* blocky gun in right hand */}
-        <mesh position={[0, -0.62, -0.34]}>
-          <boxGeometry args={[0.14, 0.16, 0.66]} />
-          <meshStandardMaterial color="#26262e" {...mat} />
-        </mesh>
+        {showGun && (
+          <mesh position={[0, -0.62, -0.34]}>
+            <boxGeometry args={[0.14, 0.16, 0.66]} />
+            <meshStandardMaterial color="#26262e" {...mat} />
+          </mesh>
+        )}
       </group>
       <group position={[-0.46, 0.7, 0]}>
         <mesh ref={armL} position={[0, -0.34, 0]} castShadow>
           <boxGeometry args={[0.28, 0.72, 0.28]} />
-          <meshStandardMaterial color={color} {...mat} />
+          <meshStandardMaterial color={shirt} {...mat} />
         </mesh>
       </group>
     </group>
