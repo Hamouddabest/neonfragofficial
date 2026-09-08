@@ -711,18 +711,20 @@ export function BlockyBody({
       {/* torso */}
       <mesh position={[0, 0.38, 0]} castShadow>
         <boxGeometry args={[0.62, 0.76, 0.32]} />
-        <meshStandardMaterial color={color} {...mat} />
+        <meshStandardMaterial color={shirt} {...mat} />
       </mesh>
       {/* head */}
       <mesh position={[0, 1.03, 0]} castShadow>
         <boxGeometry args={[0.56, 0.56, 0.56]} />
         <meshStandardMaterial color={skin} {...mat} />
       </mesh>
-      {/* hair / cap */}
+      {/* hair */}
       <mesh position={[0, 1.28, 0]} castShadow>
         <boxGeometry args={[0.58, 0.12, 0.58]} />
         <meshStandardMaterial color="#3b2a1d" {...mat} />
       </mesh>
+      {/* cosmetic hat */}
+      {cosmetics?.hat && <CosmeticHat shape={cosmetics.hat.shape} color={cosmetics.hat.color} mat={mat} />}
       {/* eyes */}
       {[-0.14, 0.14].map((x) => (
         <group key={x}>
