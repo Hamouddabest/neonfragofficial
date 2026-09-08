@@ -673,21 +673,25 @@ function RemotePlayerView({
 }
 
 /** Minecraft-style blocky character. Origin sits at the feet-ish (y=0 is hip). */
-function BlockyBody({
+export function BlockyBody({
   color,
   legL,
   legR,
   armL,
   armR,
+  cosmetics,
+  showGun = true,
 }: {
   color: string;
   legL?: React.RefObject<THREE.Mesh | null>;
   legR?: React.RefObject<THREE.Mesh | null>;
   armL?: React.RefObject<THREE.Mesh | null>;
   armR?: React.RefObject<THREE.Mesh | null>;
+  cosmetics?: PlayerSkin | null;
+  showGun?: boolean;
 }) {
-  const skin = "#e0ac69";
-  const pants = "#2b3a67";
+  const skin = cosmetics?.tone ?? "#e0ac69";
+  const pants = cosmetics?.pants ?? "#2b3a67";
   const mat = { metalness: 0.05, roughness: 0.95 };
   return (
     <group position={[0, 0.76, 0]}>
