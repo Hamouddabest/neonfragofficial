@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedPlayRouteImport } from './routes/_authenticated/play'
 import { Route as AuthenticatedMyMapsRouteImport } from './routes/_authenticated/my-maps'
+import { Route as AuthenticatedLockerRouteImport } from './routes/_authenticated/locker'
 import { Route as AuthenticatedGameRoomIdRouteImport } from './routes/_authenticated/game.$roomId'
 import { Route as AuthenticatedBuildRoomIdRouteImport } from './routes/_authenticated/build.$roomId'
 
@@ -41,6 +42,11 @@ const AuthenticatedMyMapsRoute = AuthenticatedMyMapsRouteImport.update({
   path: '/my-maps',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedLockerRoute = AuthenticatedLockerRouteImport.update({
+  id: '/locker',
+  path: '/locker',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedGameRoomIdRoute = AuthenticatedGameRoomIdRouteImport.update({
   id: '/game/$roomId',
   path: '/game/$roomId',
@@ -56,6 +62,7 @@ const AuthenticatedBuildRoomIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/locker': typeof AuthenticatedLockerRoute
   '/my-maps': typeof AuthenticatedMyMapsRoute
   '/play': typeof AuthenticatedPlayRoute
   '/build/$roomId': typeof AuthenticatedBuildRoomIdRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/locker': typeof AuthenticatedLockerRoute
   '/my-maps': typeof AuthenticatedMyMapsRoute
   '/play': typeof AuthenticatedPlayRoute
   '/build/$roomId': typeof AuthenticatedBuildRoomIdRoute
@@ -74,6 +82,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/locker': typeof AuthenticatedLockerRoute
   '/_authenticated/my-maps': typeof AuthenticatedMyMapsRoute
   '/_authenticated/play': typeof AuthenticatedPlayRoute
   '/_authenticated/build/$roomId': typeof AuthenticatedBuildRoomIdRoute
@@ -84,17 +93,26 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/locker'
     | '/my-maps'
     | '/play'
     | '/build/$roomId'
     | '/game/$roomId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/my-maps' | '/play' | '/build/$roomId' | '/game/$roomId'
+  to:
+    | '/'
+    | '/auth'
+    | '/locker'
+    | '/my-maps'
+    | '/play'
+    | '/build/$roomId'
+    | '/game/$roomId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/locker'
     | '/_authenticated/my-maps'
     | '/_authenticated/play'
     | '/_authenticated/build/$roomId'
@@ -144,6 +162,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyMapsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/locker': {
+      id: '/_authenticated/locker'
+      path: '/locker'
+      fullPath: '/locker'
+      preLoaderRoute: typeof AuthenticatedLockerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/game/$roomId': {
       id: '/_authenticated/game/$roomId'
       path: '/game/$roomId'
@@ -162,6 +187,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedLockerRoute: typeof AuthenticatedLockerRoute
   AuthenticatedMyMapsRoute: typeof AuthenticatedMyMapsRoute
   AuthenticatedPlayRoute: typeof AuthenticatedPlayRoute
   AuthenticatedBuildRoomIdRoute: typeof AuthenticatedBuildRoomIdRoute
@@ -169,6 +195,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedLockerRoute: AuthenticatedLockerRoute,
   AuthenticatedMyMapsRoute: AuthenticatedMyMapsRoute,
   AuthenticatedPlayRoute: AuthenticatedPlayRoute,
   AuthenticatedBuildRoomIdRoute: AuthenticatedBuildRoomIdRoute,

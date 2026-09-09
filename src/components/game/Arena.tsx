@@ -296,7 +296,9 @@ export function ArenaScene({
   horror = false,
   horrorRef,
   onJumpscare,
+  skin,
 }: {
+  skin?: PlayerSkin | null;
   controls: React.MutableRefObject<Controls>;
   onStateChange: (s: GameState) => void;
   onKillFeed: (msg: string) => void;
@@ -420,7 +422,7 @@ export function ArenaScene({
         onJumpscare={onJumpscare}
       />
       {!thirdPerson && <ViewmodelGun controls={controls} fireRef={fireRef} viewBobbing={viewBobbing} weapon={weapon} />}
-      {thirdPerson && localPosRef && <LocalBodyView localPosRef={localPosRef} controls={controls} />}
+      {thirdPerson && localPosRef && <LocalBodyView localPosRef={localPosRef} controls={controls} skin={skin} />}
       <Explosions explosionsRef={explosionsRef} />
       {quality === "fancy" && (
         <EffectComposer enableNormalPass={false} multisampling={0}>
@@ -584,6 +586,7 @@ function RemotePlayerView({
   const [rank, setRank] = useState<Rank>(() => remotePlayersRef.current.get(id)?.rank ?? "player");
   const [speaking, setSpeaking] = useState(false);
   const [team, setTeam] = useState<Team | null>(() => remotePlayersRef.current.get(id)?.team ?? null);
+  const [skin, setSkin] = useState<PlayerSkin | null>(() => remotePlayersRef.current.get(id)?.skin ?? null);
   const baseColor = useMemo(() => {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
@@ -601,6 +604,8 @@ function RemotePlayerView({
     if (rk !== rank) setRank(rk);
     const tm = r.team ?? null;
     if (tm !== team) setTeam(tm);
+    const sk = r.skin ?? null;
+    if (sk !== skin) setSkin(sk);
     // walk animation
     const dx = r.x - prev.current.x;
     const dz = r.z - prev.current.z;
@@ -623,7 +628,14 @@ function RemotePlayerView({
   });
   return (
     <group ref={ref}>
-      <BlockyBody color={color} legL={legL} legR={legR} armL={armL} armR={armR} />
+      <BlockyBody
+        color={color}
+        legL={legL}
+        legR={legR}
+        armL={armL}
+        armR={armR}
+        cosmetics={skin ? (team ? { ...skin, shirt: TEAM_COLORS[team] } : skin) : null}
+      />
       <Billboard position={[0, 2.3, 0]}>
         {speaking && (
           <group ref={micRef} position={[rank !== "player" ? -0.85 : -0.6, rank !== "player" ? 0.45 : 0, 0]}>
@@ -877,9 +889,11 @@ export function BlockyBody({
 function LocalBodyView({
   localPosRef,
   controls,
+  skin,
 }: {
   localPosRef: React.MutableRefObject<LocalPos>;
   controls: React.MutableRefObject<Controls>;
+  skin?: PlayerSkin | null;
 }) {
   const ref = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Mesh>(null);
@@ -902,7 +916,7 @@ function LocalBodyView({
   });
   return (
     <group ref={ref}>
-      <BlockyBody color="#22d3ee" legL={legL} legR={legR} armL={armL} armR={armR} />
+      <BlockyBody color="#22d3ee" legL={legL} legR={legR} armL={armL} armR={armR} cosmetics={skin ?? null} />
     </group>
   );
 }

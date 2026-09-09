@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2, Star, Play } from "lucide-react";
+import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2, Star, Play, Shirt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { ensureGuest } from "@/hooks/use-identity";
 import { useQuery } from "@tanstack/react-query";
@@ -80,6 +80,13 @@ function Index() {
               <Hammer className="mr-2" /> Build arena
             </Link>
           </Button>
+          {user && (
+            <Button asChild size="lg" variant="outline" className="h-14 px-10 text-base font-bold uppercase tracking-widest border-amber-400 text-amber-300 hover:bg-amber-400/10">
+              <Link to="/locker">
+                <Shirt className="mr-2" /> Locker &amp; shop
+              </Link>
+            </Button>
+          )}
           {!user && !loading && (
             <Button onClick={playAsGuest} size="lg" variant="outline" className="h-14 px-10 text-base font-bold uppercase tracking-widest border-accent text-accent hover:bg-accent/10">
               <UserCircle2 className="mr-2" /> Play as guest
@@ -93,6 +100,7 @@ function Index() {
             { icon: Users, title: "Multiplayer", body: "Create or join a room code and squad up with friends." },
             { icon: Mic, title: "Voice + Chat", body: "Talk over voice, type quick callouts. Built-in." },
             { icon: Hammer, title: "Creative Builder", body: "Build your own 3D arena with blocks, stairs, and spawn points." },
+            { icon: Shirt, title: "Skins & Coins", body: "Earn coins playing, claim daily rewards, buy hats, shirts and pants — or design your own." },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="rounded-lg border border-border/60 bg-card/60 p-6 text-left backdrop-blur">
               <Icon className="mb-3 text-primary" />

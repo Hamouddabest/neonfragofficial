@@ -4,6 +4,8 @@ import { ArenaScene, type GameState, type RemotePlayer, type PlayerPose, type Sh
 import { Car as CarIcon, ChevronUp, Crosshair as CrosshairIcon, Flame, Flashlight, Gamepad2, Ghost, Headphones, Heart, Maximize, Minimize, Mic, MicOff, MessageSquare, Monitor, RotateCw, Search, Send, Settings as SettingsIcon, Smartphone, Sliders, Swords, Target, Rocket, Users, Video, Wand2, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIdentity } from "@/hooks/use-identity";
+import { useSkin } from "@/hooks/use-skin";
+import type { PlayerSkin } from "@/lib/cosmetics";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useAuth } from "@/hooks/use-auth";
 import { Room, RoomEvent, Track, RemoteAudioTrack, type LocalAudioTrack, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from "livekit-client";
@@ -72,6 +74,9 @@ export const Route = createFileRoute("/_authenticated/game/$roomId")({
 function Game() {
   const { roomId } = Route.useParams();
   const { identity } = useIdentity();
+  const { skin } = useSkin();
+  const mySkinRef = useRef<PlayerSkin | null>(null);
+  const paidKillsRef = useRef(0);
   const { isAdmin } = useIsAdmin();
   const { user } = useAuth();
   const isOwner = !!user?.email && user.email.toLowerCase() === OWNER_EMAIL;
@@ -555,6 +560,23 @@ function Game() {
     setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 2500);
   }
 
+  // Keep the broadcast copy of my look in sync, and re-announce when it changes.
+  useEffect(() => {
+    mySkinRef.current = skin;
+    channelRef.current
+      ?.track({ name: myNameRef.current, rank: myRankRef.current, skin })
+      .catch(() => {});
+  }, [skin]);
+
+  // Coins for fragging (signed-in players only).
+  useEffect(() => {
+    if (!identity || identity.isGuest) return;
+    const delta = hud.kills - paidKillsRef.current;
+    if (delta <= 0) return;
+    paidKillsRef.current = hud.kills;
+    supabase.rpc("award_play_coins", { _amount: Math.min(delta * 10, 60) }).then(() => {});
+  }, [hud.kills, identity]);
+
   // Supabase Realtime: presence + pose broadcast + shots
   useEffect(() => {
     if (!identity || isPractice) return;
@@ -580,7 +602,7 @@ function Game() {
       channelRef.current = channel;
 
       channel.on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState() as Record<string, { name?: string; rank?: Rank }[]>;
+        const state = channel.presenceState() as Record<string, { name?: string; rank?: Rank; skin?: PlayerSkin }[]>;
         const ids = Object.keys(state);
         setPlayerCount(ids.length);
         // drop disconnected
@@ -594,6 +616,7 @@ function Game() {
             const name = state[id]?.[0]?.name ?? "Rival";
             remotePlayersRef.current.set(id, {
               id, name, x: 0, y: 0.9, z: 0, yaw: 0, alive: true, rank: state[id]?.[0]?.rank ?? "player",
+              skin: state[id]?.[0]?.skin ?? null,
             });
           }
           // refresh names from presence
@@ -602,12 +625,14 @@ function Game() {
           if (r && nm) r.name = nm;
           const rk = state[id]?.[0]?.rank;
           if (r && rk) r.rank = rk;
+          const sk = state[id]?.[0]?.skin;
+          if (r && sk) r.skin = sk;
         }
         setRemoteIds(ids.filter((i) => i !== identity.id));
       });
 
       channel.on("broadcast", { event: "pose" }, ({ payload }) => {
-        const p = payload as PlayerPose & { id: string; name: string; rank?: Rank };
+        const p = payload as PlayerPose & { id: string; name: string; rank?: Rank; skin?: PlayerSkin | null };
         if (p.id === identity.id) return;
         const existing = remotePlayersRef.current.get(p.id);
         remotePlayersRef.current.set(p.id, {
@@ -619,6 +644,7 @@ function Game() {
           rank: p.rank ?? existing?.rank ?? "player",
           team: p.team ?? existing?.team,
           carrying: p.carrying ?? null,
+          skin: p.skin ?? existing?.skin ?? null,
         });
       });
 
@@ -715,7 +741,7 @@ function Game() {
 
       channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ name: myNameRef.current, rank: myRankRef.current });
+          await channel.track({ name: myNameRef.current, rank: myRankRef.current, skin: mySkinRef.current });
         }
       });
     })();
@@ -733,7 +759,7 @@ function Game() {
   useEffect(() => {
     const ch = channelRef.current;
     if (!ch) return;
-    ch.track({ name: myNameRef.current, rank: myRank }).catch(() => {});
+    ch.track({ name: myNameRef.current, rank: myRank, skin: mySkinRef.current }).catch(() => {});
   }, [myRank]);
 
   // Connect LiveKit voice room
@@ -908,7 +934,7 @@ function Game() {
     ch.send({
       type: "broadcast",
       event: "pose",
-      payload: { ...p, id: myIdRef.current, name: myNameRef.current, rank: myRankRef.current },
+      payload: { ...p, id: myIdRef.current, name: myNameRef.current, rank: myRankRef.current, skin: mySkinRef.current },
     });
   }
 
@@ -1312,6 +1338,7 @@ function Game() {
         horror={isHorror}
         horrorRef={isHorror ? horrorRef : undefined}
         onJumpscare={triggerJumpscare}
+        skin={skin}
       />
 
       {/* HUD */}

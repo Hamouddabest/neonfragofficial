@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Ghost, Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon } from "lucide-react";
+import { Ghost, Skull, Swords, Target, Trophy, LogOut, Zap, Hammer, UserCircle2, Star, FolderOpen, X, Flag, Crosshair, Loader2, Users, PartyPopper, Copy, DoorOpen, Mic, MicOff, Settings as SettingsIcon, Shirt } from "lucide-react";
 import { toast } from "sonner";
 import { useIdentity, clearGuest } from "@/hooks/use-identity";
 import { GameSettings } from "@/components/game/GameSettings";
@@ -660,6 +660,15 @@ function PlayLobby() {
             </div>
             <Button onClick={saveCallsign} variant="outline">Save</Button>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <Button asChild className="h-14 w-full bg-amber-400 text-black hover:bg-amber-300 font-bold uppercase tracking-widest shadow-[0_0_24px_rgba(251,191,36,0.4)]">
+            <Link to="/locker">
+              <Shirt className="mr-2 size-5" />
+              Locker — skins, shop &amp; daily coins
+            </Link>
+          </Button>
         </div>
 
         {!isGuest && (
