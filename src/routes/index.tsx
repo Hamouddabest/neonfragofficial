@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2, Star, Play } from "lucide-react";
+import { Crosshair, Gamepad2, Hammer, Mic, Users, UserCircle2, Star, Play, Shirt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { ensureGuest } from "@/hooks/use-identity";
 import { useQuery } from "@tanstack/react-query";
