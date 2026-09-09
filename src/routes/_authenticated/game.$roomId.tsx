@@ -560,6 +560,23 @@ function Game() {
     setTimeout(() => setFeed((f) => f.filter((x) => x.id !== id)), 2500);
   }
 
+  // Keep the broadcast copy of my look in sync, and re-announce when it changes.
+  useEffect(() => {
+    mySkinRef.current = skin;
+    channelRef.current
+      ?.track({ name: myNameRef.current, rank: myRankRef.current, skin })
+      .catch(() => {});
+  }, [skin]);
+
+  // Coins for fragging (signed-in players only).
+  useEffect(() => {
+    if (!identity || identity.isGuest) return;
+    const delta = hud.kills - paidKillsRef.current;
+    if (delta <= 0) return;
+    paidKillsRef.current = hud.kills;
+    supabase.rpc("award_play_coins", { _amount: Math.min(delta * 10, 60) }).then(() => {});
+  }, [hud.kills, identity]);
+
   // Supabase Realtime: presence + pose broadcast + shots
   useEffect(() => {
     if (!identity || isPractice) return;
