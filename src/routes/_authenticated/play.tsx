@@ -662,6 +662,15 @@ function PlayLobby() {
           </div>
         </div>
 
+        <div className="mt-6">
+          <Button asChild className="h-14 w-full bg-amber-400 text-black hover:bg-amber-300 font-bold uppercase tracking-widest shadow-[0_0_24px_rgba(251,191,36,0.4)]">
+            <Link to="/locker">
+              <Shirt className="mr-2 size-5" />
+              Locker — skins, shop &amp; daily coins
+            </Link>
+          </Button>
+        </div>
+
         {!isGuest && (
           <div className="mt-6">
             <Button asChild variant="outline" className="w-full h-12">
